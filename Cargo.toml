@@ -7,4 +7,9 @@ edition = "2021"
 clap = "3.0.0-beta.5"
 dirs = "4.0.0"
 figment = { version = "0.10.6", features = ["test", "env", "yaml"] }
+pulldown-cmark = "0.8.0"
+pulldown-cmark-to-cmark = "7.1.0"
 serde = { version = "1.0.130", features = ["derive" ] }
+
+[dev-dependencies]
+indoc = "1.0"
