@@ -81,7 +81,7 @@ impl JournalParser {
     fn process(&mut self, markdown: &str) {
         let mut options = Options::empty();
         options.insert(Options::ENABLE_TASKLISTS);
-        let parser = MdParser::new_ext(markdown, options);
+        let mut parser = MdParser::new_ext(markdown, options).into_offset_iter();
 
         let mut found_top_level_item = false;
         let mut range_of_todo_item = None;
@@ -89,7 +89,7 @@ impl JournalParser {
         let mut depth = 0;
         let mut todo_header = TodoHeader::NotFound;
 
-        for (event, range) in parser.into_offset_iter() {
+        while let Some((event, range)) = parser.next() {
             let span =
                 tracing::span!(Level::INFO, "processing_events", ?event, ?self.state, ?depth);
             let _entered = span.enter();
@@ -100,15 +100,7 @@ impl JournalParser {
                 (Event::Start(Tag::Heading(2)), _) => {
                     todo_header = TodoHeader::Found;
                 }
-                (_, TodoHeader::ProcessedTitle) => {
-                    todo_header = TodoHeader::NotFound;
-                }
-                _ => {}
-            }
-
-            match event {
-                Event::Start(Tag::Heading(2)) => {} // handled above, prevents the catch-all at the bottom
-                Event::Text(ref text) if todo_header == TodoHeader::Found => {
+                (Event::Text(ref text), TodoHeader::Found) => {
                     todo_header = TodoHeader::ProcessedTitle;
                     if text.to_string() == "TODOs" {
                         tracing::info!("Found a TODO header");
@@ -118,6 +110,16 @@ impl JournalParser {
                         self.state = ParserState::Done;
                     }
                 }
+                (_, TodoHeader::ProcessedTitle) => {
+                    todo_header = TodoHeader::NotFound;
+                }
+                (Event::End(Tag::Heading(2)), _) => {
+                    // move on to next phase?
+                }
+                _ => {}
+            }
+
+            match event {
                 Event::Start(Tag::List(_)) if self.state == ParserState::FoundTODOHeader => {
                     tracing::info!("Processing list within TODO header");
                     self.state = ParserState::GettingTODOs;
