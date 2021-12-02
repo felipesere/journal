@@ -11,4 +11,3 @@
 
 {% endfor %}
 
-# Open PRs
