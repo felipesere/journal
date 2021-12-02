@@ -101,7 +101,7 @@ impl JournalParser {
                 }
                 (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => return true,
                 _ => {
-                    tracing::info!("Ignoring event");
+                    tracing::trace!("Ignoring event");
                 }
             }
         }
@@ -162,7 +162,7 @@ impl JournalParser {
                     }
                 }
                 _ => {
-                    tracing::info!("Ignoring event");
+                    tracing::trace!("Ignoring event");
                 }
             }
         }
@@ -177,10 +177,18 @@ fn main() {
             home.join(".journal.yaml")
         });
 
+    let level = std::env::var("JOURNAL_LOG_LEVEL")
+        .ok()
+        .and_then(|level| match level.as_ref() {
+            "trace" => Some(Level::TRACE),
+            _ => None,
+        })
+        .unwrap_or_else(|| Level::INFO);
+
     let cli = Cli::parse();
 
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(Level::TRACE)
+        .with_max_level(level)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
