@@ -128,8 +128,8 @@ fn main() -> Result<()> {
 
             let open_todos = finder
                 .found_todos
-                .iter()
-                .map(|todo| latest_entry.markdown[todo.clone()].to_string())
+                .into_iter()
+                .map(|todo| latest_entry.markdown[todo].to_string())
                 .collect::<Vec<_>>();
 
             let mut tera = Tera::default();
