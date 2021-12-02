@@ -59,7 +59,22 @@ fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
     Level::from_str(level.as_ref()).map_err(|_| ())
 }
 
+fn init_logs() {
+    let level = std::env::var("JOURNAL_LOG_LEVEL")
+        .map_err(|_| ())
+        .and_then(to_level)
+        .unwrap_or_else(|_| Level::ERROR);
+
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(level)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+}
+
 fn main() {
+    init_logs();
+
     std::env::var("JOURNAL_CONFIG")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
@@ -67,18 +82,7 @@ fn main() {
             home.join(".journal.yaml")
         });
 
-    let level = std::env::var("JOURNAL_LOG_LEVEL")
-        .map_err(|_| ())
-        .and_then(to_level)
-        .unwrap_or_else(|_| Level::ERROR);
-
     let cli = Cli::parse();
-
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(level)
-        .finish();
-
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     match cli.cmd {
         Cmd::New { title: _title } => {
