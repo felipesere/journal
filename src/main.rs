@@ -7,7 +7,11 @@ use figment::{
 };
 use pulldown_cmark::{Event, Options, Parser as MdParser, Tag};
 use serde::Deserialize;
-use std::{ops::Range, path::PathBuf};
+use std::{
+    ops::Range,
+    path::PathBuf,
+    str::FromStr,
+};
 use tera::{Context, Tera};
 use tracing::Level;
 
@@ -170,6 +174,9 @@ impl JournalParser {
             }
         }
     }
+
+fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
+    Level::from_str(level.as_ref()).map_err(|_| ())
 }
 
 fn main() {
@@ -181,12 +188,9 @@ fn main() {
         });
 
     let level = std::env::var("JOURNAL_LOG_LEVEL")
-        .ok()
-        .and_then(|level| match level.as_ref() {
-            "trace" => Some(Level::TRACE),
-            _ => None,
-        })
-        .unwrap_or_else(|| Level::INFO);
+        .map_err(|_| ())
+        .and_then(to_level)
+        .unwrap_or_else(|_| Level::ERROR);
 
     let cli = Cli::parse();
 
