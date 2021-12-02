@@ -77,14 +77,10 @@ impl JournalParser {
         }
     }
 
-    fn process(&mut self, markdown: &str) {
-        let mut options = Options::empty();
-        options.insert(Options::ENABLE_TASKLISTS);
-        let mut parser = MdParser::new_ext(markdown, options).into_offset_iter();
-
+    fn find_todo_section<'a>(&self, parser: &mut impl Iterator<Item=Event<'a>>) -> bool {
         let mut todo_header = TodoHeader::NotFound;
 
-        while let Some((event, _)) = parser.next() {
+        while let Some(event) = parser.next() {
             let span = tracing::span!(
                 Level::INFO,
                 "looking_for_todo_section",
@@ -93,8 +89,6 @@ impl JournalParser {
             );
             let _entered = span.enter();
 
-            // Pulled this out of the match statement below to make it
-            // easier to express: Found a header, and now we've processed it
             match (&event, &todo_header) {
                 (Event::Start(Tag::Heading(2)), _) => {
                     todo_header = TodoHeader::Found;
@@ -106,8 +100,7 @@ impl JournalParser {
                     }
                 }
                 (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => {
-                    // move on to next phase?
-                    break;
+                    return true
                 }
                 _ => {
                     tracing::info!("Ignoring event");
@@ -115,11 +108,22 @@ impl JournalParser {
             }
         }
 
-        if todo_header != TodoHeader::ProcessedTitle {
+        false
+    }
+
+    fn process(&mut self, markdown: &str) {
+        let mut options = Options::empty();
+        options.insert(Options::ENABLE_TASKLISTS);
+        let mut parser = MdParser::new_ext(markdown, options);
+
+        let found = self.find_todo_section(&mut parser);
+
+        if !found {
             self.state = ParserState::Done;
             return;
         }
 
+        let mut parser = parser.into_offset_iter();
         self.state = ParserState::GettingTODOs;
 
         let mut found_top_level_item = false;
@@ -131,7 +135,7 @@ impl JournalParser {
                 tracing::span!(Level::INFO, "processing_todos", ?event, state=?self.state, ?depth);
             let _entered = span.enter();
             match event {
-                Event::Start(Tag::Heading(2)) => {
+                Event::Start(Tag::Heading(_)) => {
                     // Found a new section, leaving!
                     self.state = ParserState::Done;
                     break;
