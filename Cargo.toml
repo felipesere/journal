@@ -10,6 +10,7 @@ figment = { version = "0.10.6", features = ["test", "env", "yaml"] }
 pulldown-cmark = "0.8.0"
 pulldown-cmark-to-cmark = "7.1.0"
 serde = { version = "1.0.130", features = ["derive" ] }
+tera = { version = "1", default-features = false }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = "0.2.0"
 

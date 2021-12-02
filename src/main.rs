@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+
+use clap::{AppSettings, Parser};
 use figment::{
     providers::{Env, Format, Yaml},
     Figment,
@@ -6,9 +8,10 @@ use figment::{
 use pulldown_cmark::{Event, Options, Parser as MdParser, Tag};
 use serde::Deserialize;
 use std::{ops::Range, path::PathBuf};
+use tera::{Context, Tera};
 use tracing::Level;
 
-use clap::{AppSettings, Parser};
+const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
 /// Configuration we can get either from a file or from ENV variables
 #[derive(Deserialize)]
@@ -195,16 +198,29 @@ fn main() {
 
     match cli.cmd {
         Cmd::New { title: _title } => {
+            // TODO: this needs to be removed at some point :)
             let markdown = include_str!("../example/full.md");
 
             let mut parser = JournalParser::new();
             parser.process(markdown);
 
-            for todo in parser.found_todos {
-                println!("---------------");
-                println!("{}", &markdown[todo]);
-                println!("---------------");
-            }
+            let mut tera = Tera::default();
+            tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
+
+            let open_todos = parser
+                .found_todos
+                .iter()
+                .map(|todo| markdown[todo.clone()].to_string())
+                .collect::<Vec<_>>();
+
+            let mut context = Context::new();
+            context.insert("title", "This is the title");
+            context.insert("date", "2021-12-02");
+            context.insert("open_todos", &open_todos);
+
+            let out = tera.render("day.md", &context).unwrap();
+
+            print!("{}", out);
         }
     }
 }
