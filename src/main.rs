@@ -63,7 +63,7 @@ struct JournalParser {
     state: ParserState,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum TodoHeader {
     NotFound,
     Found,
@@ -89,9 +89,14 @@ impl JournalParser {
         let mut depth = 0;
         let mut todo_header = TodoHeader::NotFound;
 
-        while let Some((event, range)) = parser.next() {
-            let span =
-                tracing::span!(Level::INFO, "processing_events", ?event, ?self.state, ?depth);
+        while let Some((event, _)) = parser.next() {
+            let span = tracing::span!(
+                Level::INFO,
+                "looking_for_todo_section",
+                ?event,
+                ?todo_header,
+                ?depth
+            );
             let _entered = span.enter();
 
             // Pulled this out of the match statement below to make it
@@ -101,25 +106,36 @@ impl JournalParser {
                     todo_header = TodoHeader::Found;
                 }
                 (Event::Text(ref text), TodoHeader::Found) => {
-                    todo_header = TodoHeader::ProcessedTitle;
                     if text.to_string() == "TODOs" {
+                        todo_header = TodoHeader::ProcessedTitle;
                         tracing::info!("Found a TODO header");
-                        self.state = ParserState::FoundTODOHeader;
-                    } else {
-                        tracing::info!("New section, done with TODOs");
-                        self.state = ParserState::Done;
+                        self.state = ParserState::FoundTODOHeader; // REMOVE at some point
                     }
                 }
-                (_, TodoHeader::ProcessedTitle) => {
-                    todo_header = TodoHeader::NotFound;
-                }
-                (Event::End(Tag::Heading(2)), _) => {
+                (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => {
                     // move on to next phase?
+                    break;
                 }
-                _ => {}
+                _ => {
+                    tracing::info!("Ignoring event");
+                }
             }
+        }
 
+        if todo_header != TodoHeader::ProcessedTitle {
+            self.state = ParserState::Done;
+            return;
+        }
+
+        while let Some((event, range)) = parser.next() {
+            let span =
+                tracing::span!(Level::INFO, "processing_todos", ?event, state=?self.state, ?depth);
+            let _entered = span.enter();
             match event {
+                Event::Start(Tag::Heading(2)) => {
+                    self.state = ParserState::Done;
+                    break;
+                }
                 Event::Start(Tag::List(_)) if self.state == ParserState::FoundTODOHeader => {
                     tracing::info!("Processing list within TODO header");
                     self.state = ParserState::GettingTODOs;
@@ -198,6 +214,21 @@ mod test {
         use crate::{JournalParser, ParserState};
         use indoc::indoc;
         use tracing_test::traced_test;
+
+        #[test]
+        #[traced_test]
+        fn there_were_no_todos() {
+            let markdown = indoc! {r#"
+                # Something
+
+                "#};
+
+            let mut parser = JournalParser::new();
+            parser.process(markdown);
+
+            assert_eq!(parser.state, ParserState::Done);
+            assert_eq!(parser.found_todos.len(), 0);
+        }
 
         #[test]
         #[traced_test]
