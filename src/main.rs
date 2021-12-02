@@ -132,7 +132,7 @@ impl JournalParser {
 
         while let Some((event, range)) = parser.next() {
             let span =
-                tracing::span!(Level::INFO, "processing_todos", ?event, state=?self.state, ?depth);
+                tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
             let _entered = span.enter();
             match event {
                 Event::Start(Tag::Heading(_)) => {
