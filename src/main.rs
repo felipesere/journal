@@ -9,6 +9,7 @@ use figment::{
 
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
+use time::{OffsetDateTime, format_description};
 use tera::{Context as TeraContext, Tera};
 use tracing::Level;
 
@@ -119,7 +120,7 @@ fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
-        Cmd::New { title: _title } => {
+        Cmd::New { title } => {
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
@@ -134,9 +135,12 @@ fn main() -> Result<()> {
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
 
+            let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
+            let today = OffsetDateTime::now_utc().format(&year_month_day)?;
+
             let mut context = TeraContext::new();
-            context.insert("title", "This is the title");
-            context.insert("date", "2021-12-02");
+            context.insert("title", &title);
+            context.insert("date", &today);
             context.insert("open_todos", &open_todos);
 
             let out = tera.render("day.md", &context).unwrap();
