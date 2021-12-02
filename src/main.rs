@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use anyhow::{bail, Context, Result};
 use clap::{AppSettings, Parser};
 use figment::{
     providers::{Env, Format, Yaml},
@@ -8,7 +9,7 @@ use figment::{
 
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use tera::{Context, Tera};
+use tera::{Context as TeraContext, Tera};
 use tracing::Level;
 
 const DAY_TEMPLATE: &str = include_str!("../template/day.md");
@@ -30,6 +31,7 @@ impl Config {
                 home.join(".journal.yaml")
             });
 
+        tracing::info!("Loading configfrom {:?}", config_path);
         Figment::new()
             .merge(Yaml::file(config_path))
             .merge(Env::prefixed("JOURNAL_"))
@@ -72,15 +74,10 @@ fn init_logs() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 }
 
-fn main() {
+fn main() -> Result<()> {
     init_logs();
 
-    std::env::var("JOURNAL_CONFIG")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            let home = dirs::home_dir().expect("Unable to get the the users 'home' directory");
-            home.join(".journal.yaml")
-        });
+    let config = Config::load().context("Failed to load configuration")?;
 
     let cli = Cli::parse();
 
@@ -101,7 +98,7 @@ fn main() {
                 .map(|todo| markdown[todo.clone()].to_string())
                 .collect::<Vec<_>>();
 
-            let mut context = Context::new();
+            let mut context = TeraContext::new();
             context.insert("title", "This is the title");
             context.insert("date", "2021-12-02");
             context.insert("open_todos", &open_todos);
@@ -111,6 +108,8 @@ fn main() {
             print!("{}", out);
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
