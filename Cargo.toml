@@ -16,5 +16,8 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = "0.2.0"
 
 [dev-dependencies]
+assert_fs = "1.0"
 indoc = "1.0"
+predicates = "2.1.0"
 tracing-test = "0.2.1"
+

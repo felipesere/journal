@@ -74,20 +74,57 @@ fn init_logs() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 }
 
+struct Entry {
+    path: PathBuf,
+    markdown: String,
+}
+
+struct Journal {
+    location: PathBuf,
+}
+
+impl Journal {
+    fn new_at<P: Into<PathBuf>>(location: P) -> Journal {
+        Journal {
+            location: location.into(),
+        }
+    }
+
+    fn latest_entry(&self) -> Result<Entry> {
+        // Would still need a filter that matches naming convention
+        let mut entries = std::fs::read_dir(&self.location)?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, std::io::Error>>()?;
+
+        // The order in which `read_dir` returns entries is not guaranteed. If reproducible
+        // ordering is required the entries should be explicitly sorted.
+        entries.sort();
+
+        if let Some(path) = entries.pop() {
+            let markdown = std::fs::read_to_string(&path)?;
+
+            return Ok(Entry { path, markdown });
+        }
+
+        bail!("No journal entries found in {:?}", self.location);
+    }
+}
+
 fn main() -> Result<()> {
     init_logs();
 
     let config = Config::load().context("Failed to load configuration")?;
 
     let cli = Cli::parse();
+    let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
         Cmd::New { title: _title } => {
             // TODO: this needs to be removed at some point :)
-            let markdown = include_str!("../example/full.md");
+            let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
-            finder.process(markdown);
+            finder.process(&latest_entry.markdown);
 
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
@@ -95,7 +132,7 @@ fn main() -> Result<()> {
             let open_todos = finder
                 .found_todos
                 .iter()
-                .map(|todo| markdown[todo.clone()].to_string())
+                .map(|todo| latest_entry.markdown[todo.clone()].to_string())
                 .collect::<Vec<_>>();
 
             let mut context = TeraContext::new();
@@ -114,6 +151,68 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod test {
+    mod journal {
+        use crate::Journal;
+        use assert_fs::prelude::*;
+        use assert_fs::TempDir;
+        use predicates::prelude::*;
+        use predicates::str::contains;
+
+        #[test]
+        fn empty_journal() {
+            let location = TempDir::new().unwrap();
+
+            let journal = Journal::new_at(location.path());
+
+            let entry = journal.latest_entry();
+
+            assert!(entry.is_err());
+        }
+
+        #[test]
+        fn single_journal_entry() {
+            let dir = TempDir::new().unwrap();
+            dir.child("2021-08-23-first_entry.md")
+                .write_str("first content")
+                .unwrap();
+
+            let journal = Journal::new_at(dir.path());
+
+            let entry = journal.latest_entry();
+
+            assert!(entry.is_ok());
+            let entry = entry.unwrap();
+            assert_eq!(
+                true,
+                contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
+            );
+            assert_eq!(entry.markdown, "first content");
+        }
+
+        #[test]
+        fn returns_the_latest_entry() {
+            let dir = TempDir::new().unwrap();
+            dir.child("2021-07-03-older_entry.md")
+                .write_str("older content")
+                .unwrap();
+            dir.child("2021-08-23-first_entry.md")
+                .write_str("first content")
+                .unwrap();
+
+            let journal = Journal::new_at(dir.path());
+
+            let entry = journal.latest_entry();
+
+            assert!(entry.is_ok());
+            let entry = entry.unwrap();
+            assert_eq!(
+                true,
+                contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
+            );
+            assert_eq!(entry.markdown, "first content");
+        }
+    }
+
     mod config {
         use crate::Config;
 
