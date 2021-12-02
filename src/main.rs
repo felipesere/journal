@@ -120,7 +120,6 @@ fn main() -> Result<()> {
 
     match cli.cmd {
         Cmd::New { title: _title } => {
-            // TODO: this needs to be removed at some point :)
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
