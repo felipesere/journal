@@ -93,8 +93,8 @@ impl Journal {
     fn latest_entry(&self) -> Result<Entry> {
         // Would still need a filter that matches naming convention
         let mut entries = std::fs::read_dir(&self.location)?
-            .map(|res| res.map(|e| e.path()))
-            .collect::<Result<Vec<_>, std::io::Error>>()?;
+            .map(|res| res.map(|e| e.path()).unwrap())
+            .collect::<Vec<_>>();
 
         // The order in which `read_dir` returns entries is not guaranteed. If reproducible
         // ordering is required the entries should be explicitly sorted.
@@ -114,8 +114,8 @@ fn main() -> Result<()> {
     init_logs();
 
     let config = Config::load().context("Failed to load configuration")?;
-
     let cli = Cli::parse();
+
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
@@ -125,14 +125,14 @@ fn main() -> Result<()> {
             let mut finder = todo::FindTodos::new();
             finder.process(&latest_entry.markdown);
 
-            let mut tera = Tera::default();
-            tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
-
             let open_todos = finder
                 .found_todos
                 .iter()
                 .map(|todo| latest_entry.markdown[todo.clone()].to_string())
                 .collect::<Vec<_>>();
+
+            let mut tera = Tera::default();
+            tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
 
             let mut context = TeraContext::new();
             context.insert("title", "This is the title");
@@ -152,8 +152,7 @@ fn main() -> Result<()> {
 mod test {
     mod journal {
         use crate::Journal;
-        use assert_fs::prelude::*;
-        use assert_fs::TempDir;
+        use assert_fs::{prelude::*, TempDir};
         use predicates::prelude::*;
         use predicates::str::contains;
 
