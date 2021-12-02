@@ -89,13 +89,13 @@ fn main() {
             // TODO: this needs to be removed at some point :)
             let markdown = include_str!("../example/full.md");
 
-            let mut parser = todo::JournalParser::new();
-            parser.process(markdown);
+            let mut finder = todo::FindTodos::new();
+            finder.process(markdown);
 
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
 
-            let open_todos = parser
+            let open_todos = finder
                 .found_todos
                 .iter()
                 .map(|todo| markdown[todo.clone()].to_string())

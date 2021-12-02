@@ -4,15 +4,15 @@ use pulldown_cmark::{Event, Options, Parser, Tag};
 use tracing::Level;
 
 #[derive(Debug, PartialEq, Eq)]
-enum ParserState {
+enum State {
     Initial,
-    GettingTODOs,
+    GettingTodos,
     Done,
 }
 
-pub(crate) struct JournalParser {
+pub(crate) struct FindTodos {
     pub found_todos: Vec<Range<usize>>,
-    state: ParserState,
+    state: State,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -22,11 +22,11 @@ enum TodoHeader {
     ProcessedTitle,
 }
 
-impl JournalParser {
+impl FindTodos {
     pub(crate) fn new() -> Self {
-        JournalParser {
+        FindTodos {
             found_todos: Vec::new(),
-            state: ParserState::Initial,
+            state: State::Initial,
         }
     }
 
@@ -76,7 +76,7 @@ impl JournalParser {
             match event {
                 Event::Start(Tag::Heading(_)) => {
                     // Found a new section, leaving!
-                    self.state = ParserState::Done;
+                    self.state = State::Done;
                     break;
                 }
                 Event::Start(Tag::Item) if depth == 0 => {
@@ -118,12 +118,12 @@ impl JournalParser {
         let found = self.find_todo_section(&mut parser);
 
         if !found {
-            self.state = ParserState::Done;
+            self.state = State::Done;
             return;
         }
 
         let mut parser = parser.into_offset_iter();
-        self.state = ParserState::GettingTODOs;
+        self.state = State::GettingTodos;
 
         self.gather_open_todos(&mut parser);
     }
@@ -131,7 +131,7 @@ impl JournalParser {
 
 #[cfg(test)]
 mod tests {
-    use super::{JournalParser, ParserState};
+    use super::{FindTodos, State};
     use indoc::indoc;
     use tracing_test::traced_test;
 
@@ -143,10 +143,10 @@ mod tests {
 
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
-        assert_eq!(parser.state, ParserState::Done);
+        assert_eq!(parser.state, State::Done);
         assert_eq!(parser.found_todos.len(), 0);
     }
 
@@ -161,10 +161,10 @@ mod tests {
                 abc
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
-        assert_eq!(parser.state, ParserState::GettingTODOs,);
+        assert_eq!(parser.state, State::GettingTodos,);
     }
 
     #[test]
@@ -178,10 +178,10 @@ mod tests {
                 * [ ] abc
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
-        assert_eq!(parser.state, ParserState::GettingTODOs);
+        assert_eq!(parser.state, State::GettingTodos);
         assert_eq!(parser.found_todos.len(), 1);
     }
 
@@ -197,10 +197,10 @@ mod tests {
 
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
-        assert_eq!(parser.state, ParserState::Done);
+        assert_eq!(parser.state, State::Done);
         assert_eq!(parser.found_todos.len(), 0);
     }
 
@@ -221,7 +221,7 @@ mod tests {
                 ## Other thing
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
         for todo in &parser.found_todos {
@@ -250,7 +250,7 @@ mod tests {
                 ## Other thing
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
         for todo in &parser.found_todos {
@@ -280,7 +280,7 @@ mod tests {
                 ## Other thing
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
         for todo in &parser.found_todos {
@@ -310,7 +310,7 @@ mod tests {
                 ## Other thing
                 "#};
 
-        let mut parser = JournalParser::new();
+        let mut parser = FindTodos::new();
         parser.process(markdown);
 
         for todo in &parser.found_todos {
