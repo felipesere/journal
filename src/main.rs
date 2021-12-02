@@ -77,7 +77,7 @@ impl JournalParser {
         }
     }
 
-    fn find_todo_section<'a>(&self, parser: &mut impl Iterator<Item=Event<'a>>) -> bool {
+    fn find_todo_section<'a>(&self, parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
         let mut todo_header = TodoHeader::NotFound;
 
         while let Some(event) = parser.next() {
@@ -99,9 +99,7 @@ impl JournalParser {
                         tracing::info!("Found a TODO header");
                     }
                 }
-                (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => {
-                    return true
-                }
+                (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => return true,
                 _ => {
                     tracing::info!("Ignoring event");
                 }
@@ -131,8 +129,7 @@ impl JournalParser {
         let mut depth = 0;
 
         while let Some((event, range)) = parser.next() {
-            let span =
-                tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
+            let span = tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
             let _entered = span.enter();
             match event {
                 Event::Start(Tag::Heading(_)) => {
