@@ -116,21 +116,7 @@ impl JournalParser {
         false
     }
 
-    fn process(&mut self, markdown: &str) {
-        let mut options = Options::empty();
-        options.insert(Options::ENABLE_TASKLISTS);
-        let mut parser = MdParser::new_ext(markdown, options);
-
-        let found = self.find_todo_section(&mut parser);
-
-        if !found {
-            self.state = ParserState::Done;
-            return;
-        }
-
-        let mut parser = parser.into_offset_iter();
-        self.state = ParserState::GettingTODOs;
-
+    fn gather_open_todos<'a>(&mut self, parser: &mut impl Iterator<Item = (Event<'a>, Range<usize>)>) {
         let mut found_top_level_item = false;
         let mut range_of_todo_item = None;
         let mut depth = 0;
@@ -174,6 +160,25 @@ impl JournalParser {
             }
         }
     }
+
+    fn process(&mut self, markdown: &str) {
+        let mut options = Options::empty();
+        options.insert(Options::ENABLE_TASKLISTS);
+        let mut parser = MdParser::new_ext(markdown, options);
+
+        let found = self.find_todo_section(&mut parser);
+
+        if !found {
+            self.state = ParserState::Done;
+            return;
+        }
+
+        let mut parser = parser.into_offset_iter();
+        self.state = ParserState::GettingTODOs;
+
+        self.gather_open_todos(&mut parser);
+    }
+}
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
     Level::from_str(level.as_ref()).map_err(|_| ())
