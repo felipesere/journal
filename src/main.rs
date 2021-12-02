@@ -53,7 +53,6 @@ enum Cmd {
 #[derive(Debug, PartialEq, Eq)]
 enum ParserState {
     Initial,
-    FoundTODOHeader,
     GettingTODOs,
     Done,
 }
@@ -83,10 +82,6 @@ impl JournalParser {
         options.insert(Options::ENABLE_TASKLISTS);
         let mut parser = MdParser::new_ext(markdown, options).into_offset_iter();
 
-        let mut found_top_level_item = false;
-        let mut range_of_todo_item = None;
-
-        let mut depth = 0;
         let mut todo_header = TodoHeader::NotFound;
 
         while let Some((event, _)) = parser.next() {
@@ -95,7 +90,6 @@ impl JournalParser {
                 "looking_for_todo_section",
                 ?event,
                 ?todo_header,
-                ?depth
             );
             let _entered = span.enter();
 
@@ -109,7 +103,6 @@ impl JournalParser {
                     if text.to_string() == "TODOs" {
                         todo_header = TodoHeader::ProcessedTitle;
                         tracing::info!("Found a TODO header");
-                        self.state = ParserState::FoundTODOHeader; // REMOVE at some point
                     }
                 }
                 (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => {
@@ -127,32 +120,35 @@ impl JournalParser {
             return;
         }
 
+        self.state = ParserState::GettingTODOs;
+
+        let mut found_top_level_item = false;
+        let mut range_of_todo_item = None;
+        let mut depth = 0;
+
         while let Some((event, range)) = parser.next() {
             let span =
                 tracing::span!(Level::INFO, "processing_todos", ?event, state=?self.state, ?depth);
             let _entered = span.enter();
             match event {
                 Event::Start(Tag::Heading(2)) => {
+                    // Found a new section, leaving!
                     self.state = ParserState::Done;
                     break;
                 }
-                Event::Start(Tag::List(_)) if self.state == ParserState::FoundTODOHeader => {
-                    tracing::info!("Processing list within TODO header");
-                    self.state = ParserState::GettingTODOs;
-                }
-                Event::End(Tag::List(_)) => {
-                    tracing::info!("Found the end of a list");
-                }
-                Event::Start(Tag::Item)
-                    if self.state == ParserState::GettingTODOs && depth == 0 =>
-                {
-                    tracing::info!("Found the beginning of an item");
+                Event::Start(Tag::Item) if depth == 0 => {
+                    tracing::info!("Found the beginning of a top-level item");
                     depth += 1;
                     found_top_level_item = true;
                     range_of_todo_item = Some(range);
                 }
-                Event::Start(Tag::Item) if self.state == ParserState::GettingTODOs => {
+                Event::Start(Tag::Item) => {
                     depth += 1;
+                    tracing::info!("Beginning of an item");
+                }
+                Event::End(Tag::Item) => {
+                    depth -= 1;
+                    tracing::info!("End of an item");
                 }
                 Event::TaskListMarker(done) if found_top_level_item => {
                     tracing::info!("Found a TODO item.");
@@ -163,10 +159,6 @@ impl JournalParser {
                     } else {
                         tracing::info!("Skipping completed TODO");
                     }
-                }
-                Event::End(Tag::Item) if self.state == ParserState::GettingTODOs => {
-                    depth -= 1;
-                    tracing::info!("End of an item");
                 }
                 _ => {
                     tracing::info!("Ignoring event");
@@ -244,7 +236,7 @@ mod test {
             let mut parser = JournalParser::new();
             parser.process(markdown);
 
-            assert_eq!(parser.state, ParserState::FoundTODOHeader,);
+            assert_eq!(parser.state, ParserState::GettingTODOs,);
         }
 
         #[test]
