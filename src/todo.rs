@@ -31,7 +31,7 @@ impl FindTodos {
     fn find_todo_section<'a>(&self, parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
         let mut todo_header = TodoHeader::NotFound;
 
-        while let Some(event) = parser.next() {
+        for event in parser {
             let span = tracing::span!(
                 Level::INFO,
                 "looking_for_todo_section",
@@ -69,7 +69,7 @@ impl FindTodos {
         let mut depth = 0;
         let mut todos = Vec::new();
 
-        while let Some((event, range)) = parser.next() {
+        for (event, range) in parser {
             let span = tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
             let _entered = span.enter();
             match event {

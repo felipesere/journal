@@ -70,7 +70,7 @@ fn init_logs() {
     let level = std::env::var("JOURNAL_LOG_LEVEL")
         .map_err(|_| ())
         .and_then(to_level)
-        .unwrap_or_else(|_| Level::ERROR);
+        .unwrap_or(Level::ERROR);
 
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_max_level(level)
