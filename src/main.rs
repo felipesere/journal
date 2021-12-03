@@ -144,13 +144,7 @@ fn main() -> Result<()> {
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
-            finder.process(&latest_entry.markdown);
-
-            let open_todos = finder
-                .found_todos
-                .into_iter()
-                .map(|todo| latest_entry.markdown[todo].to_string())
-                .collect::<Vec<_>>();
+            let open_todos = finder.process(&latest_entry.markdown);
 
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();

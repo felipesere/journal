@@ -11,7 +11,6 @@ enum State {
 }
 
 pub(crate) struct FindTodos {
-    pub found_todos: Vec<Range<usize>>,
     state: State,
 }
 
@@ -25,7 +24,6 @@ enum TodoHeader {
 impl FindTodos {
     pub(crate) fn new() -> Self {
         FindTodos {
-            found_todos: Vec::new(),
             state: State::Initial,
         }
     }
@@ -65,10 +63,11 @@ impl FindTodos {
     fn gather_open_todos<'a>(
         &mut self,
         parser: &mut impl Iterator<Item = (Event<'a>, Range<usize>)>,
-    ) {
+    ) -> Vec<Range<usize>> {
         let mut found_top_level_item = false;
         let mut range_of_todo_item = None;
         let mut depth = 0;
+        let mut todos = Vec::new();
 
         while let Some((event, range)) = parser.next() {
             let span = tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
@@ -98,7 +97,7 @@ impl FindTodos {
                     found_top_level_item = false;
                     if !done {
                         tracing::info!("Storing incomplete TODO item");
-                        self.found_todos.push(range_of_todo_item.take().unwrap());
+                        todos.push(range_of_todo_item.take().unwrap());
                     } else {
                         tracing::info!("Skipping completed TODO");
                     }
@@ -108,24 +107,32 @@ impl FindTodos {
                 }
             }
         }
+
+        todos
     }
 
-    pub fn process(&mut self, markdown: &str) {
+    pub fn process(&mut self, markdown: &str) -> Vec<String> {
         let mut options = Options::empty();
         options.insert(Options::ENABLE_TASKLISTS);
         let mut parser = Parser::new_ext(markdown, options);
 
         let found = self.find_todo_section(&mut parser);
 
+        let todo_text = Vec::new();
         if !found {
             self.state = State::Done;
-            return;
+            return todo_text;
         }
 
         let mut parser = parser.into_offset_iter();
         self.state = State::GettingTodos;
 
-        self.gather_open_todos(&mut parser);
+        let ranges = self.gather_open_todos(&mut parser);
+
+        ranges
+            .into_iter()
+            .map(|todo| markdown[todo].to_string())
+            .collect::<Vec<_>>()
     }
 }
 
@@ -144,10 +151,10 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
         assert_eq!(parser.state, State::Done);
-        assert_eq!(parser.found_todos.len(), 0);
+        assert_eq!(found_todos.len(), 0);
     }
 
     #[test]
@@ -179,10 +186,10 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
         assert_eq!(parser.state, State::GettingTodos);
-        assert_eq!(parser.found_todos.len(), 1);
+        assert_eq!(found_todos.len(), 1);
     }
 
     #[test]
@@ -198,10 +205,10 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
         assert_eq!(parser.state, State::Done);
-        assert_eq!(parser.found_todos.len(), 0);
+        assert_eq!(found_todos.len(), 0);
     }
 
     #[test]
@@ -222,15 +229,15 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
-        for todo in &parser.found_todos {
+        for todo in &found_todos {
             println!("---------------");
-            println!("{}", &markdown[todo.start..todo.end]);
+            println!("{}", todo);
             println!("---------------");
         }
 
-        assert_eq!(parser.found_todos.len(), 3);
+        assert_eq!(found_todos.len(), 3);
     }
 
     #[test]
@@ -251,15 +258,15 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
-        for todo in &parser.found_todos {
+        for todo in &found_todos {
             println!("---------------");
-            println!("{}", &markdown[todo.start..todo.end]);
+            println!("{}", todo);
             println!("---------------");
         }
 
-        assert_eq!(parser.found_todos.len(), 2);
+        assert_eq!(found_todos.len(), 2);
     }
 
     #[test]
@@ -281,15 +288,15 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
-        for todo in &parser.found_todos {
+        for todo in &found_todos {
             println!("---------------");
-            println!("{}", &markdown[todo.start..todo.end]);
+            println!("{}", todo);
             println!("---------------");
         }
 
-        assert_eq!(parser.found_todos.len(), 2);
+        assert_eq!(found_todos.len(), 2);
     }
 
     #[test]
@@ -311,14 +318,14 @@ mod tests {
                 "#};
 
         let mut parser = FindTodos::new();
-        parser.process(markdown);
+        let found_todos = parser.process(markdown);
 
-        for todo in &parser.found_todos {
+        for todo in &found_todos {
             println!("---------------");
-            println!("{}", &markdown[todo.start..todo.end]);
+            println!("{}", todo);
             println!("---------------");
         }
 
-        assert_eq!(parser.found_todos.len(), 2);
+        assert_eq!(found_todos.len(), 2);
     }
 }
