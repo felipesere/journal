@@ -8,6 +8,7 @@ use figment::{
     Figment,
 };
 
+use octocrab::OctocrabBuilder;
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
 use tera::{Context as TeraContext, Tera};
@@ -146,11 +147,20 @@ impl Journal {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     init_logs();
 
     let config = Config::load().context("Failed to load configuration")?;
     let cli = Cli::parse();
+
+    let token = match config.pull_requests.auth {
+        Auth::PersonalAccessToken(token) => token,
+    };
+
+    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
+    let user = octocrab.current().user().await?;
+    tracing::info!("Logged into GitHub as {}", user.login);
 
     let journal = Journal::new_at(config.dir);
 

@@ -8,10 +8,12 @@ anyhow = "1.0"
 clap = "3.0.0-beta.5"
 dirs = "4.0.0"
 figment = { version = "0.10.6", features = ["test", "env", "yaml"] }
+octocrab = { version = "0.12" }
 pulldown-cmark = { version = "0.8.0" }
 pulldown-cmark-to-cmark = { version = "7.1.0" }
 regex = { version = "1.5" }
 serde = { version = "1.0.130", features = ["derive" ] }
+tokio = { version = "1", features = ["full"] }
 tera = { version = "1", default-features = false }
 time = { version = "0.3.5", features = ["std", "formatting"] }
 tracing = { version = "0.1", features = ["log"] }
