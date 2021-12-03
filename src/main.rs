@@ -8,7 +8,10 @@ use figment::{
     Figment,
 };
 
-use octocrab::OctocrabBuilder;
+use octocrab::{
+    models::{Label, Repository},
+    Octocrab, OctocrabBuilder,
+};
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
 use tera::{Context as TeraContext, Tera};
@@ -30,6 +33,16 @@ struct Config {
 #[derive(Deserialize)]
 struct PullRequestConfig {
     auth: Auth,
+    #[serde(rename = "select")]
+    selections: Vec<PrSelector>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct PrSelector {
+    org: Option<String>,
+    repo: Option<String>,
+    author: Option<String>,
+    label: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -147,6 +160,56 @@ impl Journal {
     }
 }
 
+#[derive(Debug)]
+struct Pr {
+    url: String,
+    title: String,
+    author: String,
+    labels: Vec<String>,
+}
+
+impl From<&octocrab::models::pulls::PullRequest> for Pr {
+    fn from(raw: &octocrab::models::pulls::PullRequest) -> Self {
+        Pr {
+            url: raw.url.clone(),
+            title: raw.title.clone(),
+            author: raw.user.login.clone(),
+            labels: raw
+                .labels
+                .clone()
+                .unwrap_or_default()
+                .iter()
+                .map(|l| l.name.clone())
+                .collect(),
+        }
+    }
+}
+
+async fn all_prs(octocrab: &Octocrab, owner: &str, repo: &str) -> Result<Vec<Pr>> {
+    let mut current_page = octocrab
+        .pulls(owner, repo)
+        .list()
+        .state(octocrab::params::State::Open)
+        .send()
+        .await?;
+
+    let mut prs: Vec<Pr> = current_page.take_items().iter().map(Pr::from).collect();
+
+    while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
+        prs.extend(
+            next_page
+                .take_items()
+                .iter()
+                .map(Pr::from)
+                .collect::<Vec<_>>(),
+        );
+
+        current_page = next_page;
+    }
+
+    Ok(prs)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logs();
@@ -162,7 +225,53 @@ async fn main() -> Result<()> {
     let user = octocrab.current().user().await?;
     tracing::info!("Logged into GitHub as {}", user.login);
 
+    // How to get a repo and then probably filter by label or author
+    let PrSelector { repo, .. } = config.pull_requests.selections[0].clone();
+    let repo_components = repo
+        .unwrap()
+        .split("/")
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    let owner = &repo_components[0];
+    let repo = &repo_components[1];
+
+    let mut prs = all_prs(&octocrab, &owner, &repo).await?;
+
+    // How to get an entire org and then process further
+
     let journal = Journal::new_at(config.dir);
+    let PrSelector { org, .. } = config.pull_requests.selections[1].clone();
+
+    let org = org.unwrap();
+
+    let mut current_page = octocrab.orgs(&org).list_repos().send().await?;
+
+    let mut repos: Vec<String> = current_page
+        .take_items()
+        .iter()
+        .map(|repo| repo.name.clone())
+        .collect();
+
+    while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
+        repos.extend(
+            next_page
+                .take_items()
+                .iter()
+                .map(|repo: &Repository| {
+                    dbg!(&repo);
+                    repo.node_id.clone()
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        current_page = next_page;
+    }
+
+    for repo in repos {
+        prs.extend(all_prs(&octocrab, &org, &repo).await?);
+    }
+    dbg!(prs);
 
     match cli.cmd {
         Cmd::New {
@@ -293,6 +402,9 @@ mod test {
                         pull_requests:
                           auth:
                             personal_access_token: "my-access-token"
+                          select:
+                            - repo: felipesere/sane-flags
+                              author: felipesere
                         "#
                     },
                 )?;
@@ -308,6 +420,7 @@ mod test {
             });
         }
 
+        #[ignore] // temporary, while I iterate
         #[test]
         fn config_read_from_env() {
             figment::Jail::expect_with(|jail| {
