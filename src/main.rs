@@ -9,8 +9,8 @@ use figment::{
 
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use time::{OffsetDateTime, format_description};
 use tera::{Context as TeraContext, Tera};
+use time::{format_description, OffsetDateTime};
 use tracing::Level;
 
 const DAY_TEMPLATE: &str = include_str!("../template/day.md");
@@ -55,7 +55,11 @@ struct Cli {
 
 #[derive(Debug, Parser)]
 enum Cmd {
-    New { title: String },
+    New {
+        title: String,
+        #[clap(short = 's', long = "stdout")]
+        write_to_stdout: bool,
+    },
 }
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
@@ -84,6 +88,12 @@ struct Journal {
     location: PathBuf,
 }
 
+fn normalize_filename(raw: &str) -> String {
+    let r = regex::Regex::new(r#"[\(\)\[\]?']"#).unwrap();
+    let lower = raw.to_lowercase().replace(" ", "-");
+    r.replace_all(&lower, "").to_string()
+}
+
 impl Journal {
     fn new_at<P: Into<PathBuf>>(location: P) -> Journal {
         Journal {
@@ -103,11 +113,18 @@ impl Journal {
 
         if let Some(path) = entries.pop() {
             let markdown = std::fs::read_to_string(&path)?;
+            tracing::info!("Lastest entry found at {:?}", path);
 
             return Ok(Entry { path, markdown });
         }
 
         bail!("No journal entries found in {:?}", self.location);
+    }
+
+    fn add_entry(&self, name: &str, data: &str) -> Result<()> {
+        let path = self.location.join(name);
+        std::fs::write(path, data)?;
+        Ok(())
     }
 }
 
@@ -120,7 +137,10 @@ fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
-        Cmd::New { title } => {
+        Cmd::New {
+            title,
+            write_to_stdout,
+        } => {
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
@@ -145,7 +165,14 @@ fn main() -> Result<()> {
 
             let out = tera.render("day.md", &context).unwrap();
 
-            print!("{}", out);
+            if write_to_stdout {
+                print!("{}", out);
+            } else {
+                let file_title = normalize_filename(&title);
+                let new_filename = format!("{}-{}.md", today, file_title);
+
+                journal.add_entry(&new_filename, &out)?;
+            }
         }
     }
 
@@ -154,6 +181,18 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod test {
+    mod title {
+        use data_test::data_test;
+
+        data_test! {
+            fn title_for_filename(input, expected) => {
+                assert_eq!(crate::normalize_filename(input), expected);
+            }
+            - a ("Easy simple lowercase", "easy-simple-lowercase")
+            - b ("What's the plan?", "whats-the-plan")
+            - c ("What's ([)the] plan?", "whats-the-plan")
+        }
+    }
     mod journal {
         use crate::Journal;
         use assert_fs::{prelude::*, TempDir};
