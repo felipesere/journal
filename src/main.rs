@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use clap::{AppSettings, Parser};
 use figment::{
     providers::{Env, Format, Yaml},
+    value::{Uncased, UncasedStr},
     Figment,
 };
 
@@ -21,6 +22,23 @@ mod todo;
 #[derive(Deserialize)]
 struct Config {
     dir: String,
+    pull_requests: PullRequestConfig,
+}
+
+/// Configuration for how journal should get outstanding Pull/Merge requests
+#[derive(Deserialize)]
+struct PullRequestConfig {
+    auth: Auth,
+}
+
+#[derive(Deserialize)]
+enum Auth {
+    #[serde(rename = "personal_access_token")]
+    PersonalAccessToken(String),
+}
+
+fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
+    Uncased::new(input.as_str().replace("__", "."))
 }
 
 impl Config {
@@ -35,7 +53,7 @@ impl Config {
         tracing::info!("Loading configfrom {:?}", config_path);
         Figment::new()
             .merge(Yaml::file(config_path))
-            .merge(Env::prefixed("JOURNAL_"))
+            .merge(Env::prefixed("JOURNAL_").map(double_underscore_separated))
             .extract()
     }
 }
@@ -249,6 +267,7 @@ mod test {
     }
 
     mod config {
+        use crate::Auth;
         use crate::Config;
 
         #[test]
@@ -257,11 +276,23 @@ mod test {
                 let config_path = jail.directory().join(".journal.yml");
                 jail.set_env("JOURNAL_CONFIG", config_path.to_string_lossy());
 
-                jail.create_file(".journal.yml", r#"dir: file/from/yaml"#)?;
+                jail.create_file(
+                    ".journal.yml",
+                    indoc::indoc! { r#"
+                        dir: file/from/yaml
+                        pull_requests:
+                          auth:
+                            personal_access_token: "my-access-token"
+                        "#
+                    },
+                )?;
 
                 let config = Config::load()?;
 
                 assert_eq!(config.dir, "file/from/yaml");
+                match config.pull_requests.auth {
+                    Auth::PersonalAccessToken(token) => assert_eq!(token, "my-access-token"),
+                }
 
                 Ok(())
             });
@@ -275,10 +306,17 @@ mod test {
 
                 jail.create_file(".journal.yml", r#"dir: file/from/yaml"#)?;
                 jail.set_env("JOURNAL_DIR", "env/set/the/dir");
+                jail.set_env(
+                    "JOURNAL_PULL_REQUESTS__AUTH__PERSONAL_ACCESS_TOKEN",
+                    "my-access-token",
+                );
 
                 let config = Config::load()?;
 
                 assert_eq!(config.dir, "env/set/the/dir");
+                match config.pull_requests.auth {
+                    Auth::PersonalAccessToken(token) => assert_eq!(token, "my-access-token"),
+                }
 
                 Ok(())
             });
