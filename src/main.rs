@@ -9,7 +9,7 @@ use figment::{
 };
 
 use octocrab::{
-    models::{Label, Repository},
+    models::{Repository},
     Octocrab, OctocrabBuilder,
 };
 use serde::Deserialize;
@@ -224,6 +224,7 @@ async fn main() -> Result<()> {
     let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
     let user = octocrab.current().user().await?;
     tracing::info!("Logged into GitHub as {}", user.login);
+    tracing::info!("Selections for PRs: {:?}", config.pull_requests.selections);
 
     // How to get a repo and then probably filter by label or author
     let PrSelector { repo, .. } = config.pull_requests.selections[0].clone();
