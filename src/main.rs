@@ -8,10 +8,7 @@ use figment::{
     Figment,
 };
 
-use octocrab::{
-    models::{Repository},
-    Octocrab, OctocrabBuilder,
-};
+use octocrab::{models::Repository, Octocrab, OctocrabBuilder};
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
 use tera::{Context as TeraContext, Tera};
@@ -39,8 +36,22 @@ struct PullRequestConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 struct PrSelector {
-    org: Option<String>,
-    repo: Option<String>,
+    #[serde(flatten)]
+    origin: Origin,
+    #[serde(flatten)]
+    filter: LocalFilter,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+enum Origin {
+    #[serde(rename = "org")]
+    Organisation(String),
+    #[serde(rename = "repo")]
+    Repository(String),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct LocalFilter {
     author: Option<String>,
     label: Option<String>,
 }
@@ -185,7 +196,9 @@ impl From<&octocrab::models::pulls::PullRequest> for Pr {
     }
 }
 
+// TODO add better tracing/instrumentation here
 async fn all_prs(octocrab: &Octocrab, owner: &str, repo: &str) -> Result<Vec<Pr>> {
+    tracing::info!("Getting PRs for org={} repo={}", owner, repo);
     let mut current_page = octocrab
         .pulls(owner, repo)
         .list()
@@ -196,6 +209,7 @@ async fn all_prs(octocrab: &Octocrab, owner: &str, repo: &str) -> Result<Vec<Pr>
     let mut prs: Vec<Pr> = current_page.take_items().iter().map(Pr::from).collect();
 
     while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
+        tracing::info!("Getting next page of PRs for org={} repo={}", owner, repo);
         prs.extend(
             next_page
                 .take_items()
@@ -210,43 +224,9 @@ async fn all_prs(octocrab: &Octocrab, owner: &str, repo: &str) -> Result<Vec<Pr>
     Ok(prs)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    init_logs();
-
-    let config = Config::load().context("Failed to load configuration")?;
-    let cli = Cli::parse();
-
-    let token = match config.pull_requests.auth {
-        Auth::PersonalAccessToken(token) => token,
-    };
-
-    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
-    let user = octocrab.current().user().await?;
-    tracing::info!("Logged into GitHub as {}", user.login);
-    tracing::info!("Selections for PRs: {:?}", config.pull_requests.selections);
-
-    // How to get a repo and then probably filter by label or author
-    let PrSelector { repo, .. } = config.pull_requests.selections[0].clone();
-    let repo_components = repo
-        .unwrap()
-        .split("/")
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-
-    let owner = &repo_components[0];
-    let repo = &repo_components[1];
-
-    let mut prs = all_prs(&octocrab, &owner, &repo).await?;
-
-    // How to get an entire org and then process further
-
-    let journal = Journal::new_at(config.dir);
-    let PrSelector { org, .. } = config.pull_requests.selections[1].clone();
-
-    let org = org.unwrap();
-
-    let mut current_page = octocrab.orgs(&org).list_repos().send().await?;
+async fn all_prs_in_org(octocrab: &Octocrab, org: &str) -> Result<Vec<Pr>> {
+    tracing::info!("Getting repos for org={}", org);
+    let mut current_page = octocrab.orgs(org).list_repos().send().await?;
 
     let mut repos: Vec<String> = current_page
         .take_items()
@@ -255,6 +235,7 @@ async fn main() -> Result<()> {
         .collect();
 
     while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
+        tracing::info!("Getting next page of repos for org={}", org);
         repos.extend(
             next_page
                 .take_items()
@@ -269,8 +250,61 @@ async fn main() -> Result<()> {
         current_page = next_page;
     }
 
+    let mut prs = Vec::new();
     for repo in repos {
-        prs.extend(all_prs(&octocrab, &org, &repo).await?);
+        prs.extend(all_prs(octocrab, org, &repo).await?);
+    }
+
+    Ok(prs)
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    init_logs();
+
+    let config = Config::load().context("Failed to load configuration")?;
+    let cli = Cli::parse();
+    let journal = Journal::new_at(config.dir);
+
+    let Auth::PersonalAccessToken(token) = config.pull_requests.auth;
+
+    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
+    let user = octocrab.current().user().await?;
+    tracing::info!("Logged into GitHub as {}", user.login);
+    tracing::info!("Selections for PRs: {:?}", config.pull_requests.selections);
+
+    let mut prs = Vec::new();
+
+    // How to get a repo and then probably filter by label or author
+    if let PrSelector {
+        origin: Origin::Repository(repo),
+        ..
+    } = config.pull_requests.selections[0].clone()
+    {
+        let repo_components = repo.split('/').map(ToString::to_string).collect::<Vec<_>>();
+
+        let owner = &repo_components[0];
+        let repo = &repo_components[1];
+
+        prs.extend(all_prs(&octocrab, owner, repo).await?);
+    }
+
+    // How to get an entire org and then process further
+
+    if let PrSelector {
+        origin: Origin::Organisation(org),
+        ..
+    } = config.pull_requests.selections[1].clone()
+    {
+        prs.extend(all_prs_in_org(&octocrab, &org).await?);
+    }
+
+    if let PrSelector {
+        origin: Origin::Organisation(org),
+        ..
+    } = config.pull_requests.selections[2].clone()
+    {
+        prs.extend(all_prs_in_org(&octocrab, &org).await?);
     }
     dbg!(prs);
 
