@@ -11,3 +11,8 @@
 
 {% endfor %}
 
+## Pull Requests:
+
+{% for pr in prs -%}
+* [ ] {{pr.title}} on [{{pr.repo}}]({{pr.url}}) by {{pr.author}}
+{% endfor %}
