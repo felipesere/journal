@@ -8,7 +8,6 @@ use figment::{
     Figment,
 };
 
-use octocrab::OctocrabBuilder;
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
 use tera::{Context as TeraContext, Tera};
@@ -16,8 +15,6 @@ use time::{format_description, OffsetDateTime};
 use tracing::Level;
 
 use github::PullRequestConfig;
-
-use crate::github::Auth;
 
 const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
@@ -153,22 +150,13 @@ async fn main() -> Result<()> {
             title,
             write_to_stdout,
         } => {
-            let Auth::PersonalAccessToken(token) = config.pull_requests.auth;
-
-            let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
-            let user = octocrab.current().user().await?;
-            tracing::info!("Logged into GitHub as {}", user.login);
-            tracing::info!("Selections for PRs: {:?}", config.pull_requests.selections);
-
-            let mut prs = Vec::new();
-            for selector in config.pull_requests.selections {
-                prs.extend(selector.get_prs(&octocrab).await?);
-            }
 
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
             let open_todos = finder.process(&latest_entry.markdown);
+
+            let prs = config.pull_requests.get_matching_prs().await?;
 
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();

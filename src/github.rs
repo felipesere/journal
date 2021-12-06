@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use octocrab::models::pulls::PullRequest;
 use octocrab::models::Repository;
-use octocrab::{Octocrab, Page};
+use octocrab::{Octocrab, Page, OctocrabBuilder};
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::instrument;
 
@@ -14,6 +14,24 @@ pub struct PullRequestConfig {
     pub auth: Auth,
     #[serde(rename = "select")]
     pub selections: Vec<PrSelector>,
+}
+
+impl PullRequestConfig {
+    pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
+        let Auth::PersonalAccessToken(ref token) = self.auth;
+
+        let octocrab = OctocrabBuilder::new().personal_token(token.clone()).build()?;
+        let user = octocrab.current().user().await?;
+        tracing::info!("Logged into GitHub as {}", user.login);
+        tracing::info!("Selections for PRs: {:?}", self.selections);
+
+        let mut prs = Vec::new();
+        for selector in &self.selections {
+            prs.extend(selector.get_prs(&octocrab).await?);
+        }
+
+        Ok(prs)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -36,7 +54,6 @@ impl LocalFilter {
         applies
     }
 }
-
 impl PrSelector {
     #[instrument(skip(octocrab))]
     pub async fn get_prs(&self, octocrab: &Octocrab) -> Result<Vec<Pr>> {
