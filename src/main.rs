@@ -261,7 +261,6 @@ mod test {
     }
 
     mod config {
-        use crate::github::Auth;
         use crate::Config;
 
         #[test]

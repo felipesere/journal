@@ -220,8 +220,8 @@ pub struct Pr {
     url: String,
 }
 
-impl From<&octocrab::models::pulls::PullRequest> for Pr {
-    fn from(raw: &octocrab::models::pulls::PullRequest) -> Self {
+impl From<&PullRequest> for Pr {
+    fn from(raw: &PullRequest) -> Self {
         Pr {
             author: raw.user.login.clone(),
             labels: raw
