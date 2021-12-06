@@ -25,7 +25,7 @@ mod todo;
 #[derive(Deserialize)]
 struct Config {
     dir: String,
-    pull_requests: PullRequestConfig,
+    pull_requests: Option<PullRequestConfig>,
 }
 
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
@@ -155,8 +155,6 @@ async fn main() -> Result<()> {
             let mut finder = todo::FindTodos::new();
             let open_todos = finder.process(&latest_entry.markdown);
 
-            let prs = config.pull_requests.get_matching_prs().await?;
-
             let mut tera = Tera::default();
             tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
 
@@ -166,8 +164,13 @@ async fn main() -> Result<()> {
             let mut context = TeraContext::new();
             context.insert("title", &title);
             context.insert("date", &today);
+
             context.insert("open_todos", &open_todos);
-            context.insert("prs", &prs);
+
+            if let Some(pull_requests) = config.pull_requests {
+                let prs = pull_requests.get_matching_prs().await?;
+                context.insert("prs", &prs);
+            }
 
             let out = tera.render("day.md", &context).unwrap();
 
