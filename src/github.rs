@@ -12,11 +12,11 @@ use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
 /// Configuration for how journal should get outstanding Pull/Merge requests
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct PullRequestConfig {
-    pub auth: Auth,
+    auth: Auth,
     #[serde(rename = "select")]
-    pub selections: Vec<PrSelector>,
+    selections: Vec<PrSelector>,
 }
 
 impl PullRequestConfig {
@@ -57,7 +57,7 @@ impl PullRequestConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct PrSelector {
+struct PrSelector {
     #[serde(flatten)]
     origin: Origin,
     #[serde(flatten)]
@@ -187,17 +187,28 @@ fn extract_repo(org: &str, page: &mut Page<Repository>) -> Vec<Repo> {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct LocalFilter {
+pub(crate) struct LocalFilter {
     #[serde(default)]
-    authors: HashSet<String>,
+    pub(crate) authors: HashSet<String>,
+
     #[serde(default)]
-    labels: HashSet<String>,
+    pub(crate) labels: HashSet<String>,
 }
 
 #[derive(Deserialize)]
-pub enum Auth {
+enum Auth {
     #[serde(rename = "personal_access_token")]
     PersonalAccessToken(String),
+}
+
+impl std::fmt::Debug for Auth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Auth::PersonalAccessToken(token) => {
+                write!(f, "{}", &token[0..3])
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
