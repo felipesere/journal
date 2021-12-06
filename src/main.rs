@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{AppSettings, Parser};
 use figment::{
     providers::{Env, Format, Yaml},
@@ -15,10 +15,12 @@ use time::{format_description, OffsetDateTime};
 use tracing::Level;
 
 use github::PullRequestConfig;
+use storage::Journal;
 
 const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
 mod github;
+mod storage;
 mod todo;
 
 /// Configuration we can get either from a file or from ENV variables
@@ -88,53 +90,10 @@ fn init_logs() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 }
 
-struct Entry {
-    path: PathBuf,
-    markdown: String,
-}
-
-struct Journal {
-    location: PathBuf,
-}
-
 fn normalize_filename(raw: &str) -> String {
     let r = regex::Regex::new(r#"[\(\)\[\]?']"#).unwrap();
     let lower = raw.to_lowercase().replace(" ", "-");
     r.replace_all(&lower, "").to_string()
-}
-
-impl Journal {
-    fn new_at<P: Into<PathBuf>>(location: P) -> Journal {
-        Journal {
-            location: location.into(),
-        }
-    }
-
-    fn latest_entry(&self) -> Result<Entry> {
-        // Would still need a filter that matches naming convention
-        let mut entries = std::fs::read_dir(&self.location)?
-            .map(|res| res.map(|e| e.path()).unwrap())
-            .collect::<Vec<_>>();
-
-        // The order in which `read_dir` returns entries is not guaranteed. If reproducible
-        // ordering is required the entries should be explicitly sorted.
-        entries.sort();
-
-        if let Some(path) = entries.pop() {
-            let markdown = std::fs::read_to_string(&path)?;
-            tracing::info!("Lastest entry found at {:?}", path);
-
-            return Ok(Entry { path, markdown });
-        }
-
-        bail!("No journal entries found in {:?}", self.location);
-    }
-
-    fn add_entry(&self, name: &str, data: &str) -> Result<()> {
-        let path = self.location.join(name);
-        std::fs::write(path, data)?;
-        Ok(())
-    }
 }
 
 #[tokio::main]
@@ -200,66 +159,6 @@ mod test {
             - a ("Easy simple lowercase", "easy-simple-lowercase")
             - b ("What's the plan?", "whats-the-plan")
             - c ("What's ([)the] plan?", "whats-the-plan")
-        }
-    }
-    mod journal {
-        use crate::Journal;
-        use assert_fs::{prelude::*, TempDir};
-        use predicates::prelude::*;
-        use predicates::str::contains;
-
-        #[test]
-        fn empty_journal() {
-            let location = TempDir::new().unwrap();
-
-            let journal = Journal::new_at(location.path());
-
-            let entry = journal.latest_entry();
-
-            assert!(entry.is_err());
-        }
-
-        #[test]
-        fn single_journal_entry() {
-            let dir = TempDir::new().unwrap();
-            dir.child("2021-08-23-first_entry.md")
-                .write_str("first content")
-                .unwrap();
-
-            let journal = Journal::new_at(dir.path());
-
-            let entry = journal.latest_entry();
-
-            assert!(entry.is_ok());
-            let entry = entry.unwrap();
-            assert_eq!(
-                true,
-                contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
-            );
-            assert_eq!(entry.markdown, "first content");
-        }
-
-        #[test]
-        fn returns_the_latest_entry() {
-            let dir = TempDir::new().unwrap();
-            dir.child("2021-07-03-older_entry.md")
-                .write_str("older content")
-                .unwrap();
-            dir.child("2021-08-23-first_entry.md")
-                .write_str("first content")
-                .unwrap();
-
-            let journal = Journal::new_at(dir.path());
-
-            let entry = journal.latest_entry();
-
-            assert!(entry.is_ok());
-            let entry = entry.unwrap();
-            assert_eq!(
-                true,
-                contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
-            );
-            assert_eq!(entry.markdown, "first content");
         }
     }
 
