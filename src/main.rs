@@ -21,8 +21,8 @@ use crate::github::Auth;
 
 const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
-mod todo;
 mod github;
+mod todo;
 
 /// Configuration we can get either from a file or from ENV variables
 #[derive(Deserialize)]
@@ -161,7 +161,6 @@ async fn main() -> Result<()> {
             tracing::info!("Selections for PRs: {:?}", config.pull_requests.selections);
 
             let mut prs = Vec::new();
-
             for selector in config.pull_requests.selections {
                 prs.extend(selector.get_prs(&octocrab).await?);
             }

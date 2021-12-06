@@ -1,10 +1,12 @@
+use std::collections::HashSet;
 use std::str::FromStr;
 
-use octocrab::Octocrab;
+use anyhow::Result;
+use octocrab::models::pulls::PullRequest;
 use octocrab::models::Repository;
+use octocrab::{Octocrab, Page};
 use serde::{Deserialize, Deserializer, Serialize};
 use tracing::instrument;
-use anyhow::Result;
 
 /// Configuration for how journal should get outstanding Pull/Merge requests
 #[derive(Deserialize)]
@@ -24,14 +26,14 @@ pub struct PrSelector {
 
 impl LocalFilter {
     fn apply(&self, pr: &Pr) -> bool {
-        if let Some(ref author) = self.author {
-            return &pr.author == author;
+        let mut applies = true;
+        if !self.authors.is_empty() {
+            applies = applies && self.authors.contains(&pr.author)
         }
-        if let Some(ref label) = self.label {
-            return pr.labels.iter().any(|l| l == label);
+        if !self.labels.is_empty() {
+            applies = applies && self.labels.intersection(&pr.labels).count() > 0;
         }
-
-        true
+        applies
     }
 }
 
@@ -41,7 +43,7 @@ impl PrSelector {
         let repos = self.origin.repos(octocrab).await?;
 
         let mut prs = Vec::new();
-        for Repo {owner, name } in repos {
+        for Repo { owner, name } in repos {
             tracing::info!("Getting PRs for org={} repo={}", owner, name);
             let mut current_page = octocrab
                 .pulls(&owner, &name)
@@ -50,30 +52,26 @@ impl PrSelector {
                 .send()
                 .await?;
 
-            prs.extend(
-                current_page
-                    .take_items()
-                    .iter()
-                    .map(Pr::from)
-                    .filter(|pr| self.filter.apply(pr))
-                    .collect::<Vec<_>>(),
-            );
+            prs.extend(self.extract_prs(&mut current_page));
 
             while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
                 tracing::info!("Getting next page of PRs for org={} repo={}", owner, name);
-                prs.extend(
-                    next_page
-                        .take_items()
-                        .iter()
-                        .map(Pr::from)
-                        .collect::<Vec<_>>(),
-                );
+                prs.extend(self.extract_prs(&mut next_page));
 
                 current_page = next_page;
             }
         }
 
         Ok(prs)
+    }
+
+    /// Converts the PullRequest to the internal format and applies the filters
+    fn extract_prs(&self, page: &mut Page<PullRequest>) -> Vec<Pr> {
+        page.take_items()
+            .iter()
+            .map(Pr::from)
+            .filter(|pr| self.filter.apply(pr))
+            .collect::<Vec<_>>()
     }
 }
 
@@ -107,7 +105,8 @@ impl FromStr for Repo {
 }
 impl<'de> Deserialize<'de> for Repo {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         FromStr::from_str(&s).map_err(serde::de::Error::custom)
@@ -121,37 +120,38 @@ impl Origin {
             Origin::Organisation(org) => {
                 tracing::info!("Getting repos for org={}", org);
                 let mut current_page = octocrab.orgs(org).list_repos().send().await?;
-
-                let mut repos: Vec<Repo> = current_page
-                    .take_items()
-                    .iter()
-                    .map(|repo| Repo{ owner: org.clone(), name:  repo.name.clone()})
-                    .collect();
+                let mut repos: Vec<Repo> = extract_repo(org, &mut current_page);
 
                 while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
                     tracing::info!("Getting next page of repos for org={}", org);
-                    repos.extend(
-                        next_page
-                            .take_items()
-                            .iter()
-                            .map(|repo: &Repository| Repo{ owner: org.clone(), name:  repo.name.clone()})
-                            .collect::<Vec<Repo>>(),
-                    );
+                    repos.extend(extract_repo(org, &mut next_page));
 
                     current_page = next_page;
                 }
 
                 Ok(repos)
             }
-            Origin::Repository(repo) => Ok(vec![repo.clone()])
+            Origin::Repository(repo) => Ok(vec![repo.clone()]),
         }
     }
 }
 
+fn extract_repo(org: &str, page: &mut Page<Repository>) -> Vec<Repo> {
+    page.take_items()
+        .iter()
+        .map(|repo: &Repository| Repo {
+            owner: org.to_string(),
+            name: repo.name.clone(),
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct LocalFilter {
-    author: Option<String>,
-    label: Option<String>,
+    #[serde(default)]
+    authors: HashSet<String>,
+    #[serde(default)]
+    labels: HashSet<String>,
 }
 
 #[derive(Deserialize)]
@@ -163,7 +163,7 @@ pub enum Auth {
 #[derive(Debug, Serialize)]
 pub struct Pr {
     author: String,
-    labels: Vec<String>,
+    labels: HashSet<String>,
     repo: String,
     title: String,
     url: String,
@@ -183,6 +183,131 @@ impl From<&octocrab::models::pulls::PullRequest> for Pr {
             repo: raw.base.repo.clone().unwrap().full_name,
             title: raw.title.clone(),
             url: raw.html_url.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod config {
+        use super::*;
+        use anyhow::Result;
+        use indoc::indoc;
+
+        #[test]
+        fn parse_localfilter_with_multiple_values() -> Result<()> {
+            let input = indoc! { r#"
+            auth:
+              personal_access_token: abc
+            select:
+                - repo: felipesere/journal
+                  labels:
+                    - foo
+                    - bar
+            "#
+            };
+
+            let pr_config: PullRequestConfig = serde_yaml::from_str(input)?;
+            assert_eq!(pr_config.selections.len(), 1);
+            let selection = &pr_config.selections[0];
+
+            assert!(selection.filter.labels.contains("foo"));
+            assert!(selection.filter.labels.contains("bar"));
+
+            Ok(())
+        }
+
+        #[test]
+        fn filter_applies_when_author_matches() {
+            let filter = LocalFilter {
+                authors: set(&["felipe"]),
+                labels: set(&[]),
+            };
+
+            let mut pr = Pr {
+                author: "felipe".into(),
+                labels: set(&[]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+
+            assert!(filter.apply(&pr));
+
+            pr.author = "anna".into();
+            assert!(!filter.apply(&pr))
+        }
+
+        #[test]
+        fn filter_applies_at_least_one_label_matches() {
+            let filter = LocalFilter {
+                authors: set(&[]),
+                labels: set(&["foo"]),
+            };
+
+            let mut pr = Pr {
+                author: "...".into(),
+                labels: set(&["foo", "bar"]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+
+            assert!(filter.apply(&pr));
+
+            pr.labels = set(&["batz"]);
+            assert!(!filter.apply(&pr))
+        }
+
+        #[test]
+        fn filter_author_and_label_need_to_match() {
+            let filter = LocalFilter {
+                authors: set(&["felipe"]),
+                labels: set(&["foo"]),
+            };
+
+            let pr = Pr {
+                author: "felipe".into(),
+                labels: set(&["foo", "bar"]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+
+            assert!(filter.apply(&pr));
+
+            let pr = Pr {
+                author: "felipe".into(),
+                labels: set(&["batz"]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+            assert!(!filter.apply(&pr));
+
+            let pr = Pr {
+                author: "anna".into(),
+                labels: set(&["foo"]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+            assert!(!filter.apply(&pr));
+
+            let pr = Pr {
+                author: "anna".into(),
+                labels: set(&["batz"]),
+                repo: "...".into(),
+                title: "...".into(),
+                url: "...".into(),
+            };
+            assert!(!filter.apply(&pr));
+        }
+
+        fn set(input: &[&str]) -> HashSet<String> {
+            input.into_iter().map(ToString::to_string).collect()
         }
     }
 }

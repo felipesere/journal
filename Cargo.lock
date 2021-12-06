@@ -825,6 +825,7 @@ dependencies = [
  "pulldown-cmark-to-cmark",
  "regex",
  "serde",
+ "serde_yaml",
  "tera",
  "time 0.3.5",
  "tokio 1.14.0",
