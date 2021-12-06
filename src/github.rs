@@ -2,11 +2,14 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use anyhow::Result;
-use octocrab::models::pulls::PullRequest;
-use octocrab::models::Repository;
-use octocrab::{Octocrab, Page, OctocrabBuilder};
+use futures::future::join_all;
+use octocrab::{
+    models::{pulls::PullRequest, Repository},
+    Octocrab, OctocrabBuilder, Page,
+};
 use serde::{Deserialize, Deserializer, Serialize};
-use tracing::instrument;
+use tokio::task::JoinHandle;
+use tracing::{instrument, Instrument};
 
 /// Configuration for how journal should get outstanding Pull/Merge requests
 #[derive(Deserialize)]
@@ -20,14 +23,33 @@ impl PullRequestConfig {
     pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
         let Auth::PersonalAccessToken(ref token) = self.auth;
 
-        let octocrab = OctocrabBuilder::new().personal_token(token.clone()).build()?;
+        let octocrab = OctocrabBuilder::new()
+            .personal_token(token.clone())
+            .build()?;
         let user = octocrab.current().user().await?;
         tracing::info!("Logged into GitHub as {}", user.login);
         tracing::info!("Selections for PRs: {:?}", self.selections);
 
-        let mut prs = Vec::new();
+        let mut join_handles = Vec::new();
         for selector in &self.selections {
-            prs.extend(selector.get_prs(&octocrab).await?);
+            let selector = selector.clone();
+            let token = token.clone();
+            let handle: JoinHandle<Result<Vec<Pr>>> = tokio::spawn(
+                async move {
+                    // Make life easy and just create multiple instances
+                    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
+                    selector.get_prs(&octocrab).await
+                }
+                .instrument(tracing::info_span!("getting prs")),
+            );
+
+            join_handles.push(handle);
+        }
+
+        let task_results = join_all(join_handles).await;
+        let mut prs = Vec::new();
+        for task in task_results {
+            prs.extend(task??); // double unwrapping, facepalm
         }
 
         Ok(prs)

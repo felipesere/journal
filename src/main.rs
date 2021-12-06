@@ -150,7 +150,6 @@ async fn main() -> Result<()> {
             title,
             write_to_stdout,
         } => {
-
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
