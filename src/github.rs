@@ -88,6 +88,7 @@ impl PrSelector {
                 .pulls(&owner, &name)
                 .list()
                 .state(octocrab::params::State::Open)
+                .per_page(50)
                 .send()
                 .await?;
 
@@ -158,7 +159,7 @@ impl Origin {
         match self {
             Origin::Organisation(org) => {
                 tracing::info!("Getting repos for org={}", org);
-                let mut current_page = octocrab.orgs(org).list_repos().send().await?;
+                let mut current_page = octocrab.orgs(org).list_repos().per_page(50).send().await?;
                 let mut repos: Vec<Repo> = extract_repo(org, &mut current_page);
 
                 while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
