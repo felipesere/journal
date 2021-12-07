@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use anyhow::{Context, Result};
 use clap::{AppSettings, Parser};
 use figment::{

@@ -2,7 +2,6 @@ use anyhow::{bail, Result};
 use std::path::PathBuf;
 
 pub struct Entry {
-    path: PathBuf,
     pub markdown: String,
 }
 
@@ -31,7 +30,7 @@ impl Journal {
             let markdown = std::fs::read_to_string(&path)?;
             tracing::info!("Lastest entry found at {:?}", path);
 
-            return Ok(Entry { path, markdown });
+            return Ok(Entry { markdown });
         }
 
         bail!("No journal entries found in {:?}", self.location);
@@ -48,8 +47,6 @@ impl Journal {
 mod tests {
     use super::*;
     use assert_fs::{prelude::*, TempDir};
-    use predicates::prelude::*;
-    use predicates::str::contains;
 
     #[test]
     fn empty_journal() {
@@ -75,10 +72,6 @@ mod tests {
 
         assert!(entry.is_ok());
         let entry = entry.unwrap();
-        assert_eq!(
-            true,
-            contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
-        );
         assert_eq!(entry.markdown, "first content");
     }
 
@@ -98,10 +91,6 @@ mod tests {
 
         assert!(entry.is_ok());
         let entry = entry.unwrap();
-        assert_eq!(
-            true,
-            contains("2021-08-23-first_entry.md").eval(&entry.path.to_string_lossy())
-        );
         assert_eq!(entry.markdown, "first content");
     }
 }
