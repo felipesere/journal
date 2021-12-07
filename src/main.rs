@@ -17,6 +17,7 @@ use storage::Journal;
 use self::template::Template;
 
 mod github;
+mod reminders;
 mod storage;
 mod template;
 mod todo;
