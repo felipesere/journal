@@ -8,17 +8,17 @@ use figment::{
 
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use tera::{Context as TeraContext, Tera};
-use time::{format_description, OffsetDateTime};
+use time::OffsetDateTime;
 use tracing::Level;
 
 use github::PullRequestConfig;
 use storage::Journal;
 
-const DAY_TEMPLATE: &str = include_str!("../template/day.md");
+use self::template::Template;
 
 mod github;
 mod storage;
+mod template;
 mod todo;
 
 /// Configuration we can get either from a file or from ENV variables
@@ -110,26 +110,25 @@ async fn main() -> Result<()> {
             let latest_entry = journal.latest_entry()?;
 
             let mut finder = todo::FindTodos::new();
-            let open_todos = finder.process(&latest_entry.markdown);
+            let todos = finder.process(&latest_entry.markdown);
 
-            let mut tera = Tera::default();
-            tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
+            let prs = if let Some(config) = config.pull_requests {
+                let prs = config.get_matching_prs().await?;
+                Some(prs)
+            } else {
+                None
+            };
 
-            let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
-            let today = OffsetDateTime::now_utc().format(&year_month_day)?;
+            let today = OffsetDateTime::now_utc();
 
-            let mut context = TeraContext::new();
-            context.insert("title", &title);
-            context.insert("date", &today);
+            let template = Template {
+                title: title.clone(),
+                today,
+                todos,
+                prs,
+            };
 
-            context.insert("open_todos", &open_todos);
-
-            if let Some(pull_requests) = config.pull_requests {
-                let prs = pull_requests.get_matching_prs().await?;
-                context.insert("prs", &prs);
-            }
-
-            let out = tera.render("day.md", &context).unwrap();
+            let out = template.render()?;
 
             if write_to_stdout {
                 print!("{}", out);
