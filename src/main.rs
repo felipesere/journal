@@ -14,7 +14,8 @@ use tracing::Level;
 use github::PullRequestConfig;
 use storage::Journal;
 
-use self::template::Template;
+use reminders::{Clock, Reminders, SpecificDate, WallClock};
+use template::Template;
 
 mod github;
 mod reminders;
@@ -70,6 +71,18 @@ enum Cmd {
         #[clap(short = 's', long = "stdout")]
         write_to_stdout: bool,
     },
+    #[clap(subcommand)]
+    Reminder(ReminderCmd),
+}
+
+#[derive(Debug, Parser)]
+enum ReminderCmd {
+    New {
+        #[clap(long)]
+        on: SpecificDate,
+        #[clap(takes_value(true))]
+        reminder: String,
+    },
 }
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
@@ -104,6 +117,22 @@ async fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
+        Cmd::Reminder(ReminderCmd::New { on, reminder }) => {
+            let clock = WallClock;
+
+            let mut reminders = Reminders::load();
+
+            let next = on.next_date(clock.today());
+
+            reminders.on_date(next, reminder.clone());
+
+            let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
+            println!(
+                "Added a reminder for '{}' on '{}'",
+                reminder,
+                next.format(&year_month_day)?
+            );
+        }
         Cmd::New {
             title,
             write_to_stdout,

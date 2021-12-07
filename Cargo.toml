@@ -16,7 +16,7 @@ regex = { version = "1.5" }
 serde = { version = "1.0.130", features = ["derive" ] }
 tokio = { version = "1", features = ["full"] }
 tera = { version = "1", default-features = false }
-time = { version = "0.3.5", features = ["std", "formatting"] }
+time = { version = "0.3.5", features = ["formatting", "macros", "parsing", "std"] }
 tracing = { version = "0.1", features = ["log", "attributes"] }
 tracing-futures = { version = "0.2", features = ["tokio"] }
 tracing-subscriber = "0.2.0"
