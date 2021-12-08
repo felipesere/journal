@@ -124,8 +124,8 @@ async fn main() -> Result<()> {
     match cli.cmd {
         Cmd::Reminder(ReminderCmd::New {
             on_date: specific_date_spec,
+            every: interval_spec,
             reminder,
-            ..
         }) => {
             if config.reminders.is_none() {
                 println!("No reminder configuration set. Please add it first");
@@ -136,8 +136,8 @@ async fn main() -> Result<()> {
 
             let mut reminders = Reminders::load(&location)?;
 
+            let clock = WallClock;
             if let Some(date_spec) = specific_date_spec {
-                let clock = WallClock;
                 let next = date_spec.next_date(clock.today());
 
                 reminders.on_date(next, reminder.clone());
@@ -152,6 +152,20 @@ async fn main() -> Result<()> {
                     "Added a reminder for '{}' on '{}'",
                     reminder,
                     next.format(&year_month_day)?
+                );
+            }
+
+            if let Some(interval_spec) = interval_spec {
+                reminders.every(&clock, &interval_spec, &reminder);
+
+                reminders
+                    .save(&location)
+                    .context("Failed to save reminders")?;
+
+                println!(
+                    "Added a reminder for '{}' every '{}'",
+                    reminder,
+                    interval_spec,
                 );
             }
         }

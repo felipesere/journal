@@ -97,11 +97,11 @@ impl Reminders {
         reminders
     }
 
-    pub fn every(&mut self, clock: &impl Clock, interval: RepeatingDate, reminder: &str) {
+    pub fn every(&mut self, clock: &impl Clock, interval: &RepeatingDate, reminder: &str) {
         let start = clock.today();
         self.intervals.push(RepeatingReminder {
             start,
-            interval,
+            interval: interval.clone(),
             reminder: reminder.to_string(),
         });
     }
@@ -203,13 +203,22 @@ fn parse_month(month: &str) -> Result<Month, String> {
     Ok(month)
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum RepeatingDate {
     Weekday(Weekday),
     Periodic { amount: usize, period: Period },
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+impl std::fmt::Display for RepeatingDate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RepeatingDate::Weekday(weekday) => write!(f, "{}", weekday),
+            RepeatingDate::Periodic { amount, period } => write!(f, "{} {:?}", amount, period),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub enum Period {
     Days,
     Weeks,
@@ -330,7 +339,7 @@ mod tests {
         let mut reminders = Reminders::new();
 
         clock.advance_to(Monday);
-        reminders.every(&clock, RepeatingDate::Weekday(Wednesday), "Email someone");
+        reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "Email someone");
 
         clock.advance_to(Wednesday);
         let todays_reminders = reminders.for_today(&clock);
@@ -339,7 +348,7 @@ mod tests {
         clock.advance_by(1.days()); // Thursday
         reminders.every(
             &clock,
-            RepeatingDate::Periodic {
+            &RepeatingDate::Periodic {
                 amount: 2,
                 period: Period::Weeks,
             },

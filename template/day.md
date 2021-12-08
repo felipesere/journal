@@ -22,6 +22,6 @@
 ## Your reminders for today:
 
 {% for reminder in reminders -%}
-* [ ] {{ reminder-}}
+* [ ] {{ reminder }}
 {% endfor %}
 {% endif %}
