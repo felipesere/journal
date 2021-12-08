@@ -14,7 +14,7 @@ use tracing::Level;
 use github::PullRequestConfig;
 use storage::Journal;
 
-use reminders::{Clock, ReminderConfig, Reminders, SpecificDate, WallClock};
+use reminders::{Clock, ReminderConfig, Reminders, RepeatingDate, SpecificDate, WallClock};
 use template::Template;
 
 mod github;
@@ -79,8 +79,12 @@ enum Cmd {
 #[derive(Debug, Parser)]
 enum ReminderCmd {
     New {
-        #[clap(long = "on")]
-        on_date: SpecificDate,
+        #[clap(long = "on", group = "date_selection")]
+        on_date: Option<SpecificDate>,
+
+        #[clap(long = "every", group = "date_selection")]
+        every: Option<RepeatingDate>,
+
         #[clap(takes_value(true))]
         reminder: String,
     },
@@ -118,32 +122,38 @@ async fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
-        Cmd::Reminder(ReminderCmd::New { on_date, reminder }) => {
+        Cmd::Reminder(ReminderCmd::New {
+            on_date: specific_date_spec,
+            reminder,
+            ..
+        }) => {
             if config.reminders.is_none() {
                 println!("No reminder configuration set. Please add it first");
                 return Ok(());
             }
-            tracing::info!("creating a new reminder");
+            tracing::info!("intention to create a new reminder");
             let location = config.reminders.unwrap().location;
-            let clock = WallClock;
 
             let mut reminders = Reminders::load(&location)?;
 
-            let next = on_date.next_date(clock.today());
+            if let Some(date_spec) = specific_date_spec {
+                let clock = WallClock;
+                let next = date_spec.next_date(clock.today());
 
-            reminders.on_date(next, reminder.clone());
+                reminders.on_date(next, reminder.clone());
 
-            reminders
-                .save(&location)
-                .context("Failed to save reminders")?;
+                reminders
+                    .save(&location)
+                    .context("Failed to save reminders")?;
 
-            tracing::info!("Saved reminders");
-            let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
-            println!(
-                "Added a reminder for '{}' on '{}'",
-                reminder,
-                next.format(&year_month_day)?
-            );
+                tracing::info!("Saved reminders");
+                let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
+                println!(
+                    "Added a reminder for '{}' on '{}'",
+                    reminder,
+                    next.format(&year_month_day)?
+                );
+            }
         }
         Cmd::New {
             title,

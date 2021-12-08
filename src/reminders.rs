@@ -167,6 +167,19 @@ fn parse_day_month(s: &str) -> Result<SpecificDate, String> {
     Ok(SpecificDate::OnDayMonth(day.get(), month))
 }
 
+#[derive(Debug)]
+pub enum RepeatingDate {
+    Placeholder,
+}
+
+impl FromStr for RepeatingDate {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(RepeatingDate::Placeholder)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
