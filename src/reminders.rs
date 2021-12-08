@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::num::ParseIntError;
 use std::ops::Mul;
 use std::path::{Path, PathBuf};
@@ -107,7 +108,7 @@ impl Reminders {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum SpecificDate {
     Next(Weekday),
     OnDate(Date),
@@ -203,13 +204,13 @@ fn parse_month(month: &str) -> Result<Month, String> {
     Ok(month)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RepeatingDate {
     Weekday(Weekday),
     Periodic { amount: usize, period: Period },
 }
 
-impl std::fmt::Display for RepeatingDate {
+impl Display for RepeatingDate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RepeatingDate::Weekday(weekday) => write!(f, "{}", weekday),
@@ -218,7 +219,7 @@ impl std::fmt::Display for RepeatingDate {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Period {
     Days,
     Weeks,

@@ -3,7 +3,7 @@ use std::ops::Range;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use tracing::Level;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq)]
 enum State {
     Initial,
     GettingTodos,
@@ -14,7 +14,7 @@ pub(crate) struct FindTodos {
     state: State,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Eq, PartialEq)]
 enum TodoHeader {
     NotFound,
     Found,
