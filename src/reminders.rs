@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -106,7 +107,7 @@ impl FromStr for SpecificDate {
             return Ok(result);
         }
 
-        parse_weekday(s)
+        parse_weekday(s).map(|day| SpecificDate::Next(day))
     }
 }
 
@@ -118,7 +119,7 @@ fn parse_day_month_year(s: &str) -> Result<SpecificDate, String> {
     Ok(SpecificDate::OnDate(date))
 }
 
-fn parse_weekday(s: &str) -> Result<SpecificDate, String> {
+fn parse_weekday(s: &str) -> Result<Weekday, String> {
     let day = match s {
         "Monday" | "monday" => Weekday::Monday,
         "Tuesday" | "tuesday" => Weekday::Tuesday,
@@ -130,7 +131,7 @@ fn parse_weekday(s: &str) -> Result<SpecificDate, String> {
         _ => return Err(format!("No matching day of the week: {}", s)),
     };
 
-    Ok(SpecificDate::Next(day))
+    Ok(day)
 }
 
 fn parse_day_month(s: &str) -> Result<SpecificDate, String> {
@@ -167,16 +168,41 @@ fn parse_day_month(s: &str) -> Result<SpecificDate, String> {
     Ok(SpecificDate::OnDayMonth(day.get(), month))
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum RepeatingDate {
-    Placeholder,
+    Weekday(Weekday),
+    Periodic(usize, Period),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Period {
+    Days,
+    Weeks,
+    Months,
 }
 
 impl FromStr for RepeatingDate {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(RepeatingDate::Placeholder)
+        let parsed = parse_weekday(s).map(|day| RepeatingDate::Weekday(day));
+        if parsed.is_ok() {
+            return parsed;
+        }
+
+        if let Some((digits, period)) = s.split_once('.') {
+            let amount = str::parse(&digits).map_err(|e: ParseIntError| e.to_string())?;
+            let period = match period {
+                "days" => Period::Days,
+                "weeks" => Period::Weeks,
+                "months" => Period::Months,
+                _ => return Err(format!("unknown period: {}", period)),
+            };
+
+            return Ok(RepeatingDate::Periodic(amount, period));
+        }
+
+        Err(format!("Unrecognized format for repeating date: {}", s))
     }
 }
 
@@ -277,7 +303,7 @@ mod tests {
     }
 
     mod parsing_specific_date {
-        use super::SpecificDate;
+        use super::*;
         use data_test::data_test;
         use std::str::FromStr;
         use time::{macros::date, Weekday};
@@ -294,6 +320,29 @@ mod tests {
             - short_day_month ("2.Feb",      super::SpecificDate::OnDayMonth(2, time::Month::February))
             - day_month_year ("15.Jan.2022", super::SpecificDate::OnDate(super::date! (2022 - 01 - 15)))
             - weekday ("Wednesday",          super::SpecificDate::Next(super::Weekday::Wednesday))
+        }
+    }
+
+    mod parsing_repeating_date {
+        use super::*;
+        use data_test::data_test;
+        use std::str::FromStr;
+        use time::{macros::date, Weekday};
+
+        data_test! {
+
+            fn parses_date(input, expected) => {
+                use super::*;
+
+                assert_eq!(RepeatingDate::from_str(input), expected);
+            }
+            - weekday ("Wednesday", Ok(super::RepeatingDate::Weekday(super::Weekday::Wednesday)))
+            - n_days ("2.days", Ok(super::RepeatingDate::Periodic(2, super::Period::Days)))
+            - n_weeks ("7.weeks", Ok(super::RepeatingDate::Periodic(7, super::Period::Weeks)))
+            - n_months ("3.months", Ok(super::RepeatingDate::Periodic(3, super::Period::Months)))
+            - negative_amount ("-1.months", Err("invalid digit found in string".into()))
+            - unknown_period ("1.fortnights", Err("unknown period: fortnights".into()))
+            - missing_separator ("quaselgoop", Err("Unrecognized format for repeating date: quaselgoop".into()))
         }
     }
 
