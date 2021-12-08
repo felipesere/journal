@@ -50,7 +50,9 @@ impl Reminders {
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read(path)
             .with_context(|| format!("Could not load reminders from {:?}", path))?;
-        serde_json::from_slice(&content).map_err(|e| anyhow!(e)).context("Could not read structure in file")
+        serde_json::from_slice(&content)
+            .map_err(|e| anyhow!(e))
+            .context("Could not read structure in file")
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {

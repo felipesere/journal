@@ -164,8 +164,7 @@ async fn main() -> Result<()> {
 
                 println!(
                     "Added a reminder for '{}' every '{}'",
-                    reminder,
-                    interval_spec,
+                    reminder, interval_spec,
                 );
             }
         }
