@@ -49,6 +49,8 @@ You can also adjust that value on each call using `JOURNAL_DIR=/different/locati
 
 You can have `journal` remind you of events:
 
+`journal reminders add --on ... "Some message"`
+
 | Example usage                            | Meaning                         |
 | ---------------------------------------- | ------------------------------- |
 | `--on $WEEKDAY` like `--on Monday` ...   | On next `$WEEKDAY`, e.g. Monday |

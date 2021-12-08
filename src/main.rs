@@ -14,7 +14,7 @@ use tracing::Level;
 use github::PullRequestConfig;
 use storage::Journal;
 
-use reminders::{Clock, Reminders, SpecificDate, WallClock};
+use reminders::{Clock, ReminderConfig, Reminders, SpecificDate, WallClock};
 use template::Template;
 
 mod github;
@@ -28,6 +28,7 @@ mod todo;
 struct Config {
     dir: String,
     pull_requests: Option<PullRequestConfig>,
+    reminders: Option<ReminderConfig>,
 }
 
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
@@ -43,7 +44,7 @@ impl Config {
                 home.join(".journal.yaml")
             });
 
-        tracing::info!("Loading configfrom {:?}", config_path);
+        tracing::info!("Loading config from {:?}", config_path);
         Figment::new()
             .merge(Yaml::file(config_path))
             .merge(Env::prefixed("JOURNAL_").map(double_underscore_separated))
@@ -78,8 +79,8 @@ enum Cmd {
 #[derive(Debug, Parser)]
 enum ReminderCmd {
     New {
-        #[clap(long)]
-        on: SpecificDate,
+        #[clap(long = "on")]
+        on_date: SpecificDate,
         #[clap(takes_value(true))]
         reminder: String,
     },
@@ -117,15 +118,26 @@ async fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
-        Cmd::Reminder(ReminderCmd::New { on, reminder }) => {
+        Cmd::Reminder(ReminderCmd::New { on_date, reminder }) => {
+            if config.reminders.is_none() {
+                println!("No reminder configuration set. Please add it first");
+                return Ok(());
+            }
+            tracing::info!("creating a new reminder");
+            let location = config.reminders.unwrap().location;
             let clock = WallClock;
 
-            let mut reminders = Reminders::load();
+            let mut reminders = Reminders::load(&location)?;
 
-            let next = on.next_date(clock.today());
+            let next = on_date.next_date(clock.today());
 
             reminders.on_date(next, reminder.clone());
 
+            reminders
+                .save(&location)
+                .context("Failed to save reminders")?;
+
+            tracing::info!("Saved reminders");
             let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
             println!(
                 "Added a reminder for '{}' on '{}'",
@@ -138,13 +150,21 @@ async fn main() -> Result<()> {
             write_to_stdout,
         } => {
             let latest_entry = journal.latest_entry()?;
-
             let mut finder = todo::FindTodos::new();
             let todos = finder.process(&latest_entry.markdown);
 
             let prs = if let Some(config) = config.pull_requests {
                 let prs = config.get_matching_prs().await?;
                 Some(prs)
+            } else {
+                None
+            };
+
+            let reminders = if let Some(ReminderConfig { location: dir }) = config.reminders {
+                let clock = WallClock;
+                let reminders = Reminders::load(&dir)?;
+
+                Some(reminders.for_today(&clock))
             } else {
                 None
             };
@@ -156,6 +176,7 @@ async fn main() -> Result<()> {
                 today,
                 todos,
                 prs,
+                reminders,
             };
 
             let out = template.render()?;
@@ -209,6 +230,8 @@ mod test {
                             - repo: felipesere/sane-flags
                               authors:
                                 - felipesere
+                        reminders:
+                            location: "abc"
                         "#
                     },
                 )?;
@@ -216,6 +239,7 @@ mod test {
                 let config = Config::load()?;
                 assert_eq!(config.dir, "file/from/yaml");
                 assert!(config.pull_requests.is_some());
+                assert!(config.reminders.is_some());
 
                 Ok(())
             });

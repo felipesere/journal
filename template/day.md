@@ -13,8 +13,15 @@
 
 {% if  prs %}
 ## Pull Requests:
+{% for pr in prs %}
+* [ ] {{pr.title-}} on [{{pr.repo-}}]({{pr.url-}}) by {{ pr.author -}}
+{% endfor %}
+{% endif -%}
 
-{% for pr in prs -%}
-* [ ] {{pr.title}} on [{{pr.repo}}]({{pr.url}}) by {{pr.author}}
+{% if  reminders %}
+## Your reminders for today:
+
+{% for reminder in reminders -%}
+* [ ] {{ reminder-}}
 {% endfor %}
 {% endif %}

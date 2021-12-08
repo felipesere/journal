@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use anyhow::{anyhow, Context, Result};
+use serde::{Deserialize, Serialize};
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
 pub trait Clock {
@@ -15,22 +18,44 @@ impl Clock for WallClock {
     }
 }
 
+#[derive(Deserialize)]
+pub struct ReminderConfig {
+    pub location: PathBuf,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct Reminders {
     dated: BTreeMap<Date, Vec<String>>,
 }
 
 impl Reminders {
-    pub fn load() -> Self {
+    pub fn new() -> Self {
         Self {
             dated: BTreeMap::new(),
         }
+    }
+
+    pub fn load(path: &Path) -> Result<Self> {
+        let content = std::fs::read(path)
+            .with_context(|| format!("Could not load reminders from {:?}", path))?;
+        serde_json::from_slice(&content).map_err(|e| anyhow!(e))
+    }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        tracing::info!("Saving reminders to {}", path.to_string_lossy());
+        let mut reminders_file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .context("Opening reminders file to write")?;
+        serde_json::to_writer_pretty(&mut reminders_file, &self).map_err(|e| anyhow!(e))
     }
 
     pub fn on_date<S: Into<String>>(&mut self, date: Date, reminder: S) {
         self.dated.entry(date).or_default().push(reminder.into());
     }
 
-    fn for_today(&self, clock: &impl Clock) -> Vec<String> {
+    pub fn for_today(&self, clock: &impl Clock) -> Vec<String> {
         let today = clock.today();
 
         if let Some(reminders) = self.dated.get(&today) {
@@ -73,15 +98,15 @@ impl FromStr for SpecificDate {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(result) = parse_day_month_year(&s) {
+        if let Ok(result) = parse_day_month_year(s) {
             return Ok(result);
         }
 
-        if let Ok(result) = parse_day_month(&s) {
+        if let Ok(result) = parse_day_month(s) {
             return Ok(result);
         }
 
-        parse_weekday(&s)
+        parse_weekday(s)
     }
 }
 
@@ -149,6 +174,8 @@ mod tests {
     use std::ops::Add;
 
     use anyhow::Result;
+    use assert_fs::{prelude::*, TempDir};
+    use indoc::indoc;
     use time::{ext::NumericalDuration, macros::date, Date, Duration, Month, Month::*};
 
     struct ControlledClock {
@@ -178,9 +205,9 @@ mod tests {
     }
 
     #[test]
-    fn large_integration_test() -> Result<()> {
+    fn large_in_memory_test() -> Result<()> {
         let mut clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::load(); // maybe something about files here?
+        let mut reminders = Reminders::new();
 
         reminders.on_date(clock.after(3.days()), "Email someone");
 
@@ -191,6 +218,43 @@ mod tests {
 
         let todays_reminders = reminders.for_today(&clock);
         assert_eq!(todays_reminders, vec!["Email someone".to_string()]);
+
+        clock.advance_by(1.days());
+        let todays_reminders = reminders.for_today(&clock);
+        assert!(todays_reminders.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn adding_multiple_reminders_on_filesystem() -> Result<()> {
+        let mut clock = ControlledClock::new(2021, July, 15)?;
+
+        let dir = TempDir::new().unwrap();
+        dir.child("reminders.json")
+            .write_str(r#"{"dated": {}}"#)
+            .unwrap();
+
+        let mut reminders = Reminders::load(&dir.path().join("reminders.json"))?;
+
+        reminders.on_date(clock.after(3.days()), "First task");
+        reminders.on_date(clock.after(4.days()), "Second task");
+        reminders.on_date(clock.after(4.days()), "Third task");
+
+        let todays_reminders = reminders.for_today(&clock);
+        assert!(todays_reminders.is_empty());
+
+        clock.advance_by(3.days());
+
+        let todays_reminders = reminders.for_today(&clock);
+        assert_eq!(todays_reminders, vec!["First task".to_string()]);
+
+        clock.advance_by(1.days());
+        let todays_reminders = reminders.for_today(&clock);
+        assert_eq!(
+            todays_reminders,
+            vec!["Second task".to_string(), "Third task".to_string()]
+        );
 
         clock.advance_by(1.days());
         let todays_reminders = reminders.for_today(&clock);
@@ -217,6 +281,24 @@ mod tests {
             - short_day_month ("2.Feb",      super::SpecificDate::OnDayMonth(2, time::Month::February))
             - day_month_year ("15.Jan.2022", super::SpecificDate::OnDate(super::date! (2022 - 01 - 15)))
             - weekday ("Wednesday",          super::SpecificDate::Next(super::Weekday::Wednesday))
+        }
+    }
+
+    mod config {
+        use super::*;
+
+        #[test]
+        fn parse_config() -> Result<()> {
+            let input = indoc! { r#"
+            location: path/to/dir
+            "#
+            };
+
+            let config: ReminderConfig = serde_yaml::from_str(&input).unwrap();
+
+            assert_eq!(config.location, PathBuf::from("path/to/dir"));
+
+            Ok(())
         }
     }
 

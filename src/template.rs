@@ -11,6 +11,7 @@ pub struct Template {
     pub today: OffsetDateTime,
     pub todos: Vec<String>,
     pub prs: Option<Vec<Pr>>,
+    pub reminders: Option<Vec<String>>,
 }
 
 impl Template {
@@ -27,6 +28,9 @@ impl Template {
 
         if let Some(ref prs) = self.prs {
             context.insert("prs", prs);
+        }
+        if let Some(ref reminders) = self.reminders {
+            context.insert("reminders", reminders);
         }
 
         tera.render("day.md", &context).map_err(|e| anyhow!(e))
