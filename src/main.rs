@@ -79,6 +79,7 @@ enum Cmd {
 #[derive(Debug, Parser)]
 #[clap(alias = "reminders")]
 enum ReminderCmd {
+    /// Add a new reminder, either on a specific date or recurring.
     New {
         #[clap(long = "on", group = "date_selection")]
         on_date: Option<SpecificDate>,
@@ -89,8 +90,11 @@ enum ReminderCmd {
         #[clap(takes_value(true))]
         reminder: String,
     },
+    /// List all existing reminders
     List,
+    /// Delete a reminder
     Delete {
+        /// The number to delete
         nr: u32,
     },
 }
@@ -138,7 +142,7 @@ async fn main() -> Result<()> {
 
             let mut reminders_storage = Reminders::load(&location)?;
 
-            reminders_storage.delete(nr);
+            reminders_storage.delete(nr)?;
 
             reminders_storage
                 .save(&location)

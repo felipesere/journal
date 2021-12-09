@@ -4,7 +4,7 @@ use std::ops::Mul;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
@@ -172,10 +172,13 @@ impl Reminders {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn delete(&mut self, nr: u32) {
+    pub fn delete(&mut self, nr: u32) -> Result<()> {
         let nr = (nr - 1) as usize;
         if nr < self.stored.len() {
             self.stored.remove(nr);
+            Ok(())
+        } else {
+            bail!("There is no reminder '{}'", (nr + 1));
         }
     }
 }
@@ -296,7 +299,9 @@ impl Display for RepeatingDate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RepeatingDate::Weekday(weekday) => write!(f, "{}", weekday),
-            RepeatingDate::Periodic { amount, period } => write!(f, "{} {:?}", amount, period),
+            RepeatingDate::Periodic { amount, period } => {
+                write!(f, "every {} {:?}", amount, period)
+            }
         }
     }
 }
@@ -530,7 +535,7 @@ mod tests {
 
         assert_eq!(reminders.all().len(), 5);
 
-        reminders.delete(3); // should be the "Three"
+        reminders.delete(3)?; // should be the "Three"
         assert_eq!(reminders.all().len(), 4);
 
         let exissting_remindests = reminders
@@ -544,6 +549,18 @@ mod tests {
             &["One", "Two", /* deleted: Three */ "Four", "Five"]
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn reports_when_the_number_to_delete_is_out_of_range() -> Result<()> {
+        let clock = ControlledClock::new(2021, July, 15)?;
+        let mut reminders = Reminders::new();
+        reminders.on_date(clock.today(), "Awesome");
+        let result = reminders.delete(3);
+
+        let err = result.unwrap_err();
+        assert_eq!(err.to_string(), "There is no reminder '3'");
         Ok(())
     }
 
