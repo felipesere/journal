@@ -180,39 +180,35 @@ impl FromStr for SpecificDate {
 
 #[rustfmt::skip]
 fn parse_weekday(s: &str) -> Result<Weekday, String> {
-    let day = match s {
-        "Monday"    | "monday"   => Weekday::Monday,
-        "Tuesday"   | "tuesday"  => Weekday::Tuesday,
-        "Wednesday" | "wedneday" => Weekday::Wednesday,
-        "Thursday"  | "thursday" => Weekday::Thursday,
-        "Friday"    | "friday"   => Weekday::Friday,
-        "Saturday"  | "saturday" => Weekday::Saturday,
-        "Sunday"    | "sunday"   => Weekday::Sunday,
-        _ => return Err(format!("No matching day of the week: {}", s)),
-    };
-
-    Ok(day)
+    match s {
+        "Monday"    | "monday"   => Ok(Weekday::Monday),
+        "Tuesday"   | "tuesday"  => Ok(Weekday::Tuesday),
+        "Wednesday" | "wedneday" => Ok(Weekday::Wednesday),
+        "Thursday"  | "thursday" => Ok(Weekday::Thursday),
+        "Friday"    | "friday"   => Ok(Weekday::Friday),
+        "Saturday"  | "saturday" => Ok(Weekday::Saturday),
+        "Sunday"    | "sunday"   => Ok(Weekday::Sunday),
+        _ => Err(format!("No matching day of the week: {}", s)),
+    }
 }
 
 #[rustfmt::skip]
 fn parse_month(month: &str) -> Result<Month, String> {
-    let month = match month {
-        "January"   | "Jan" | "january"   | "jan" => Month::January,
-        "February"  | "Feb" | "february"  | "feb" => Month::February,
-        "March"     | "Mar" | "march"     | "mar" => Month::March,
-        "April"     | "Apr" | "april"     | "apr" => Month::April,
-        "May"                             | "may" => Month::May,
-        "June"      | "Jun" | "june"      | "jun" => Month::June,
-        "July"      | "Jul" | "july"      | "jul" => Month::July,
-        "August"    | "Aug" | "august"    | "aug" => Month::August,
-        "September" | "Sep" | "september" | "sep" => Month::September,
-        "October"   | "Oct" | "october"   | "oct" => Month::October,
-        "November"  | "Nov" | "november"  | "nov" => Month::November,
-        "December"  | "Dec" | "december"  | "dec" => Month::December,
-        _ => return Err(format!("No matching month name: {}", month)),
-    };
-
-    Ok(month)
+    match month {
+        "January"   | "Jan" | "january"   | "jan" => Ok(Month::January),
+        "February"  | "Feb" | "february"  | "feb" => Ok(Month::February),
+        "March"     | "Mar" | "march"     | "mar" => Ok(Month::March),
+        "April"     | "Apr" | "april"     | "apr" => Ok(Month::April),
+        "May"                             | "may" => Ok(Month::May),
+        "June"      | "Jun" | "june"      | "jun" => Ok(Month::June),
+        "July"      | "Jul" | "july"      | "jul" => Ok(Month::July),
+        "August"    | "Aug" | "august"    | "aug" => Ok(Month::August),
+        "September" | "Sep" | "september" | "sep" => Ok(Month::September),
+        "October"   | "Oct" | "october"   | "oct" => Ok(Month::October),
+        "November"  | "Nov" | "november"  | "nov" => Ok(Month::November),
+        "December"  | "Dec" | "december"  | "dec" => Ok(Month::December),
+        _ => Err(format!("No matching month name: {}", month)),
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
