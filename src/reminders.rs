@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
+use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
-use time::{Date, Month, OffsetDateTime, Weekday};
+use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
 pub trait Clock {
     fn today(&self) -> Date;
@@ -118,6 +119,55 @@ impl Reminders {
 
         reminders
     }
+
+    pub fn all(&self) -> Vec<Reminder> {
+        let mut nr = 1;
+        let mut result = Vec::new();
+        for (date, reminders) in &self.dated {
+            for reminder in reminders {
+                result.push(Reminder {
+                    nr,
+                    date: DateRepr::Exact(*date),
+                    reminder: reminder.to_string(),
+                });
+                nr += 1;
+            }
+        }
+
+        for reminder in &self.intervals {
+            result.push(Reminder {
+                nr,
+                date: DateRepr::Repeating(reminder.interval.clone()),
+                reminder: reminder.reminder.to_string(),
+            });
+            nr += 1;
+        }
+
+        result
+    }
+}
+
+pub enum DateRepr {
+    Exact(Date),
+    Repeating(RepeatingDate),
+}
+
+impl Display for DateRepr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DateRepr::Exact(date) => {
+                let format = format_description::parse("[year]-[month]-[day]").unwrap();
+                write!(f, "{}", date.format(&format).unwrap())
+            }
+            DateRepr::Repeating(repeating) => repeating.fmt(f),
+        }
+    }
+}
+
+pub struct Reminder {
+    pub nr: usize,
+    pub date: DateRepr,
+    pub reminder: String,
 }
 
 #[derive(Debug, Eq, PartialEq)]

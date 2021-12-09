@@ -77,6 +77,7 @@ enum Cmd {
 }
 
 #[derive(Debug, Parser)]
+#[clap(alias = "reminders")]
 enum ReminderCmd {
     New {
         #[clap(long = "on", group = "date_selection")]
@@ -88,6 +89,7 @@ enum ReminderCmd {
         #[clap(takes_value(true))]
         reminder: String,
     },
+    List,
 }
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
@@ -122,6 +124,38 @@ async fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
+        Cmd::Reminder(ReminderCmd::List) => {
+            if config.reminders.is_none() {
+                println!("No reminder configuration set. Please add it first");
+                return Ok(());
+            }
+            tracing::info!("intention to list ");
+            let location = config.reminders.unwrap().location;
+
+            let reminders_storage = Reminders::load(&location)?;
+
+            let reminders = reminders_storage.all();
+            // temp:
+            use comfy_table::{
+                modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, ContentArrangement, Table,
+            };
+            let mut table = Table::new();
+            table
+                .load_preset(UTF8_FULL)
+                .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_content_arrangement(ContentArrangement::Dynamic)
+                .set_header(vec!["Nr", "Date", "Reminders"]);
+
+            for reminder in reminders {
+                table.add_row(vec![
+                    reminder.nr.to_string(),
+                    format!("{}", reminder.date),
+                    reminder.reminder,
+                ]);
+            }
+
+            println!("{}", table);
+        }
         Cmd::Reminder(ReminderCmd::New {
             on_date: specific_date_spec,
             every: interval_spec,

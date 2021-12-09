@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 clap = "3.0.0-beta.5"
+comfy-table = "5.0.0"
 dirs = "4.0.0"
 figment = { version = "0.10.6", features = ["test", "env", "yaml"] }
 futures = { version = "0.3" }
