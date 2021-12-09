@@ -26,7 +26,7 @@ mod todo;
 /// Configuration we can get either from a file or from ENV variables
 #[derive(Deserialize)]
 struct Config {
-    dir: String,
+    dir: PathBuf,
     pull_requests: Option<PullRequestConfig>,
     reminders: Option<ReminderConfig>,
 }
@@ -47,7 +47,7 @@ impl Config {
         tracing::info!("Loading config from {:?}", config_path);
         Figment::new()
             .merge(Yaml::file(config_path))
-            .merge(Env::prefixed("JOURNAL_").map(double_underscore_separated))
+            .merge(Env::prefixed("JOURNAL__").map(double_underscore_separated))
             .extract()
     }
 }
@@ -128,17 +128,23 @@ async fn main() -> Result<()> {
 
     let config = Config::load().context("Failed to load configuration")?;
     let cli = Cli::parse();
-    let journal = Journal::new_at(config.dir);
+    let journal = Journal::new_at(config.dir.clone());
+
+    let with_reminders = config
+        .reminders
+        .as_ref()
+        .map(|c| c.enabled)
+        .unwrap_or(false);
 
     match cli.cmd {
         Cmd::Reminder(ReminderCmd::Delete { nr }) => {
-            if config.reminders.is_none() {
+            if !with_reminders {
                 println!("No reminder configuration set. Please add it first");
                 return Ok(());
             }
             tracing::info!("intention to delete reminder");
 
-            let location = config.reminders.unwrap().location;
+            let location = config.dir.clone().join("reminders.json");
 
             let mut reminders_storage = Reminders::load(&location)?;
 
@@ -152,12 +158,12 @@ async fn main() -> Result<()> {
             println!("Deleted {}", nr,);
         }
         Cmd::Reminder(ReminderCmd::List) => {
-            if config.reminders.is_none() {
+            if !with_reminders {
                 println!("No reminder configuration set. Please add it first");
                 return Ok(());
             }
             tracing::info!("intention to list reminders");
-            let location = config.reminders.unwrap().location;
+            let location = config.dir.join("reminders.json");
 
             let reminders_storage = Reminders::load(&location)?;
 
@@ -188,12 +194,12 @@ async fn main() -> Result<()> {
             every: interval_spec,
             reminder,
         }) => {
-            if config.reminders.is_none() {
+            if !with_reminders {
                 println!("No reminder configuration set. Please add it first");
                 return Ok(());
             }
             tracing::info!("intention to create a new reminder");
-            let location = config.reminders.unwrap().location;
+            let location = config.dir.join("reminders.json");
 
             let mut reminders = Reminders::load(&location)?;
 
@@ -244,9 +250,10 @@ async fn main() -> Result<()> {
                 None
             };
 
-            let reminders = if let Some(ReminderConfig { location: dir }) = config.reminders {
+            let reminders = if config.reminders.is_some() {
+                let location = config.dir.join("reminders.json");
                 let clock = WallClock;
-                let reminders = Reminders::load(&dir)?;
+                let reminders = Reminders::load(&location)?;
 
                 Some(reminders.for_today(&clock))
             } else {
@@ -295,6 +302,8 @@ mod test {
     }
 
     mod config {
+        use std::path::PathBuf;
+
         use crate::Config;
 
         #[test]
@@ -315,13 +324,13 @@ mod test {
                               authors:
                                 - felipesere
                         reminders:
-                            location: "abc"
+                            enabled: true
                         "#
                     },
                 )?;
 
                 let config = Config::load()?;
-                assert_eq!(config.dir, "file/from/yaml");
+                assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
                 assert!(config.pull_requests.is_some());
                 assert!(config.reminders.is_some());
 
@@ -345,7 +354,7 @@ mod test {
 
                 let config = Config::load()?;
 
-                assert_eq!(config.dir, "env/set/the/dir");
+                assert_eq!(config.dir, PathBuf::from("env/set/the/dir"));
                 assert!(config.pull_requests.is_some());
 
                 Ok(())

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::ops::Mul;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -40,7 +40,7 @@ impl Clock for WallClock {
 
 #[derive(Deserialize)]
 pub struct ReminderConfig {
-    pub location: PathBuf,
+    pub enabled: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -360,7 +360,6 @@ mod tests {
 
     use anyhow::Result;
     use assert_fs::{prelude::*, TempDir};
-    use indoc::indoc;
     use time::{ext::NumericalDuration, macros::date, Date, Duration, Month, Month::*};
 
     struct ControlledClock {
@@ -613,14 +612,11 @@ mod tests {
 
         #[test]
         fn parse_config() -> Result<()> {
-            let input = indoc! { r#"
-            location: path/to/dir
-            "#
-            };
+            let input = r#"enabled: true"#;
 
             let config: ReminderConfig = serde_yaml::from_str(&input).unwrap();
 
-            assert_eq!(config.location, PathBuf::from("path/to/dir"));
+            assert!(config.enabled);
 
             Ok(())
         }
