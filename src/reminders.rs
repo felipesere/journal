@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::ops::Mul;
@@ -6,9 +5,26 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
-use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
+
+trait WeekdayExt {
+    fn next(&self, weekday: Weekday) -> Date;
+}
+
+impl WeekdayExt for Date {
+    fn next(&self, weekday: Weekday) -> Date {
+        let mut next = *self;
+        loop {
+            if next.weekday() == weekday {
+                break;
+            }
+
+            next = next.next_day().unwrap();
+        }
+        next
+    }
+}
 
 pub trait Clock {
     fn today(&self) -> Date;
@@ -28,24 +44,24 @@ pub struct ReminderConfig {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Reminders {
-    dated: BTreeMap<Date, Vec<String>>,
-    intervals: Vec<RepeatingReminder>,
+enum InnerReminder {
+    Concrete(Date, String),
+    Recurring {
+        start: Date,
+        interval: RepeatingDate,
+        reminder: String,
+    },
 }
 
 #[derive(Deserialize, Serialize)]
-struct RepeatingReminder {
-    start: Date,
-    interval: RepeatingDate,
-    reminder: String,
+pub struct Reminders {
+    stored: Vec<InnerReminder>,
 }
 
 impl Reminders {
+    #[cfg(test)]
     pub fn new() -> Self {
-        Self {
-            dated: BTreeMap::new(),
-            intervals: Vec::new(),
-        }
+        Self { stored: Vec::new() }
     }
 
     #[tracing::instrument(err, name = "Loading reminders from disk")]
@@ -76,12 +92,13 @@ impl Reminders {
     }
 
     pub fn on_date<S: Into<String>>(&mut self, date: Date, reminder: S) {
-        self.dated.entry(date).or_default().push(reminder.into());
+        self.stored
+            .push(InnerReminder::Concrete(date, reminder.into()));
     }
 
     pub fn every(&mut self, clock: &impl Clock, interval: &RepeatingDate, reminder: &str) {
         let start = clock.today();
-        self.intervals.push(RepeatingReminder {
+        self.stored.push(InnerReminder::Recurring {
             start,
             interval: interval.clone(),
             reminder: reminder.to_string(),
@@ -94,26 +111,32 @@ impl Reminders {
 
         let mut reminders = Vec::new();
 
-        if let Some(dated_reminders) = self.dated.get(&today) {
-            reminders.extend_from_slice(dated_reminders)
-        }
-
-        for repeating_reminder in &self.intervals {
-            match &repeating_reminder.interval {
-                RepeatingDate::Weekday(weekday) => {
-                    if today.weekday() == *weekday {
-                        reminders.push(repeating_reminder.reminder.clone());
+        for reminder in &self.stored {
+            match reminder {
+                InnerReminder::Concrete(date, reminder) => {
+                    if today == *date {
+                        reminders.push(reminder.clone());
                     }
                 }
-                RepeatingDate::Periodic { amount, period } => {
-                    let interval_in_days = amount * period;
-                    let difference =
-                        today.to_julian_day() - repeating_reminder.start.to_julian_day();
-
-                    if difference % interval_in_days == 0 {
-                        reminders.push(repeating_reminder.reminder.clone());
+                InnerReminder::Recurring {
+                    start,
+                    interval,
+                    reminder,
+                } => match interval {
+                    RepeatingDate::Weekday(weekday) => {
+                        if today.weekday() == *weekday {
+                            reminders.push(reminder.clone());
+                        }
                     }
-                }
+                    RepeatingDate::Periodic { amount, period } => {
+                        let interval_in_days = amount * period;
+                        let difference = today.to_julian_day() - start.to_julian_day();
+
+                        if difference % interval_in_days == 0 {
+                            reminders.push(reminder.clone());
+                        }
+                    }
+                },
             }
         }
 
@@ -123,27 +146,37 @@ impl Reminders {
     pub fn all(&self) -> Vec<Reminder> {
         let mut nr = 1;
         let mut result = Vec::new();
-        for (date, reminders) in &self.dated {
-            for reminder in reminders {
-                result.push(Reminder {
-                    nr,
-                    date: DateRepr::Exact(*date),
-                    reminder: reminder.to_string(),
-                });
-                nr += 1;
+        for reminder in &self.stored {
+            match reminder {
+                InnerReminder::Concrete(date, reminder) => {
+                    result.push(Reminder {
+                        nr,
+                        date: DateRepr::Exact(*date),
+                        reminder: reminder.to_string(),
+                    });
+                }
+                InnerReminder::Recurring {
+                    interval, reminder, ..
+                } => {
+                    result.push(Reminder {
+                        nr,
+                        date: DateRepr::Repeating(interval.clone()),
+                        reminder: reminder.to_string(),
+                    });
+                }
             }
-        }
-
-        for reminder in &self.intervals {
-            result.push(Reminder {
-                nr,
-                date: DateRepr::Repeating(reminder.interval.clone()),
-                reminder: reminder.reminder.to_string(),
-            });
             nr += 1;
         }
 
         result
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub fn delete(&mut self, nr: u32) {
+        let nr = (nr - 1) as usize;
+        if nr < self.stored.len() {
+            self.stored.remove(nr);
+        }
     }
 }
 
@@ -175,24 +208,6 @@ pub enum SpecificDate {
     Next(Weekday),
     OnDate(Date),
     OnDayMonth(u8, Month),
-}
-
-trait WeekdayExt {
-    fn next(&self, weekday: Weekday) -> Date;
-}
-
-impl WeekdayExt for Date {
-    fn next(&self, weekday: Weekday) -> Date {
-        let mut next = *self;
-        loop {
-            if next.weekday() == weekday {
-                break;
-            }
-
-            next = next.next_day().unwrap();
-        }
-        next
-    }
 }
 
 impl SpecificDate {
@@ -373,6 +388,28 @@ mod tests {
         }
     }
 
+    // the names had to be different to not clash with time-rs
+    trait PeriodicExt {
+        fn daily(self) -> RepeatingDate;
+        fn weekly(self) -> RepeatingDate;
+    }
+
+    impl PeriodicExt for usize {
+        fn daily(self) -> RepeatingDate {
+            RepeatingDate::Periodic {
+                amount: self,
+                period: Period::Days,
+            }
+        }
+
+        fn weekly(self) -> RepeatingDate {
+            RepeatingDate::Periodic {
+                amount: self,
+                period: Period::Weeks,
+            }
+        }
+    }
+
     #[test]
     fn large_in_memory_test() -> Result<()> {
         let mut clock = ControlledClock::new(2021, July, 15)?;
@@ -409,14 +446,7 @@ mod tests {
         assert_eq!(todays_reminders, vec!["Email someone".to_string()]);
 
         clock.advance_by(1.days()); // Thursday
-        reminders.every(
-            &clock,
-            &RepeatingDate::Periodic {
-                amount: 2,
-                period: Period::Weeks,
-            },
-            "Second task",
-        );
+        reminders.every(&clock, &2.weekly(), "Second task");
 
         clock.advance_by(1.weeks()); // next Thursday
         let todays_reminders = reminders.for_today(&clock);
@@ -435,7 +465,7 @@ mod tests {
 
         let dir = TempDir::new().unwrap();
         dir.child("reminders.json")
-            .write_str(r#"{"dated": {}, "intervals": [] }"#)
+            .write_str(r#"{"stored": [] }"#)
             .unwrap();
 
         let mut reminders = Reminders::load(&dir.path().join("reminders.json"))?;
@@ -462,6 +492,57 @@ mod tests {
         clock.advance_by(1.days());
         let todays_reminders = reminders.for_today(&clock);
         assert!(todays_reminders.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn lists_all_currently_tracked_reminders() -> Result<()> {
+        // ..event past ones!
+        use time::Weekday::*;
+        let mut clock = ControlledClock::new(2021, July, 15)?;
+        let mut reminders = Reminders::new();
+
+        clock.advance_to(Monday);
+        reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "One");
+        reminders.every(&clock, &2.weekly(), "Two");
+        reminders.on_date(clock.after(3.days()), "Three");
+        reminders.on_date(clock.after(4.days()), "Four");
+        reminders.on_date(clock.after(4.days()), "Five");
+
+        assert_eq!(reminders.all().len(), 5);
+
+        Ok(())
+    }
+
+    #[test]
+    fn can_delete_reminders() -> Result<()> {
+        use time::Weekday::*;
+        let mut clock = ControlledClock::new(2021, July, 15)?;
+        let mut reminders = Reminders::new();
+
+        clock.advance_to(Monday);
+        reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "One");
+        reminders.every(&clock, &2.weekly(), "Two");
+        reminders.on_date(clock.after(3.days()), "Three");
+        reminders.on_date(clock.after(4.days()), "Four");
+        reminders.on_date(clock.after(4.days()), "Five");
+
+        assert_eq!(reminders.all().len(), 5);
+
+        reminders.delete(3); // should be the "Three"
+        assert_eq!(reminders.all().len(), 4);
+
+        let exissting_remindests = reminders
+            .all()
+            .into_iter()
+            .map(|reminders| reminders.reminder)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            exissting_remindests,
+            &["One", "Two", /* deleted: Three */ "Four", "Five"]
+        );
 
         Ok(())
     }

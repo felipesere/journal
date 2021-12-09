@@ -90,6 +90,9 @@ enum ReminderCmd {
         reminder: String,
     },
     List,
+    Delete {
+        nr: u32,
+    },
 }
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
@@ -124,12 +127,32 @@ async fn main() -> Result<()> {
     let journal = Journal::new_at(config.dir);
 
     match cli.cmd {
+        Cmd::Reminder(ReminderCmd::Delete { nr }) => {
+            if config.reminders.is_none() {
+                println!("No reminder configuration set. Please add it first");
+                return Ok(());
+            }
+            tracing::info!("intention to delete reminder");
+
+            let location = config.reminders.unwrap().location;
+
+            let mut reminders_storage = Reminders::load(&location)?;
+
+            reminders_storage.delete(nr);
+
+            reminders_storage
+                .save(&location)
+                .context("Failed to save reminders")?;
+
+            tracing::info!("Saved reminders");
+            println!("Deleted {}", nr,);
+        }
         Cmd::Reminder(ReminderCmd::List) => {
             if config.reminders.is_none() {
                 println!("No reminder configuration set. Please add it first");
                 return Ok(());
             }
-            tracing::info!("intention to list ");
+            tracing::info!("intention to list reminders");
             let location = config.reminders.unwrap().location;
 
             let reminders_storage = Reminders::load(&location)?;
