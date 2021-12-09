@@ -117,23 +117,32 @@ pub enum SpecificDate {
     OnDayMonth(u8, Month),
 }
 
+trait WeekdayExt {
+    fn next(&self, weekday: Weekday) -> Date;
+}
+
+impl WeekdayExt for Date {
+    fn next(&self, weekday: Weekday) -> Date {
+        let mut next = *self;
+        loop {
+            if next.weekday() == weekday {
+                break;
+            }
+
+            next = next.next_day().unwrap();
+        }
+        next
+    }
+}
+
 impl SpecificDate {
-    pub fn next_date(self, base: Date) -> Date {
+    pub fn next_date(self, current: Date) -> Date {
         match self {
             Self::OnDate(date) => date,
             Self::OnDayMonth(day, month) => {
-                Date::from_calendar_date(base.year(), month, day).expect("Day should have existed")
+                Date::from_calendar_date(current.year(), month, day).expect("Day should have existed")
             }
-            Self::Next(weekday) => {
-                let mut next = base;
-                loop {
-                    if next.weekday() == weekday {
-                        return next;
-                    }
-
-                    next = next.next_day().unwrap();
-                }
-            }
+            Self::Next(weekday) => current.next(weekday)
         }
     }
 }
@@ -304,12 +313,7 @@ mod tests {
         }
 
         pub(crate) fn advance_to(&mut self, weekday: Weekday) {
-            loop {
-                if self.current_date.weekday() == weekday {
-                    break;
-                }
-                self.current_date = self.current_date.next_day().unwrap();
-            }
+            self.current_date = self.current_date.next(weekday);
         }
     }
 
