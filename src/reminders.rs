@@ -47,14 +47,20 @@ impl Reminders {
         }
     }
 
+    #[tracing::instrument(err, name = "Loading reminders from disk")]
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read(path)
             .with_context(|| format!("Could not load reminders from {:?}", path))?;
-        serde_json::from_slice(&content)
+
+        let reminders = serde_json::from_slice(&content)
             .map_err(|e| anyhow!(e))
-            .context("Could not read structure in file")
+            .context("Could not read structure in file")?;
+
+        tracing::info!("Loaded reminders");
+        Ok(reminders)
     }
 
+    #[tracing::instrument(err, name = "Saving reminders to disk", skip(self))]
     pub fn save(&self, path: &Path) -> Result<()> {
         tracing::info!("Saving reminders to {}", path.to_string_lossy());
         let mut reminders_file = std::fs::OpenOptions::new()
@@ -62,13 +68,26 @@ impl Reminders {
             .truncate(true)
             .open(path)
             .context("Opening reminders file to write")?;
-        serde_json::to_writer_pretty(&mut reminders_file, &self).map_err(|e| anyhow!(e))
+
+        let _ = serde_json::to_writer_pretty(&mut reminders_file, &self).map_err(|e| anyhow!(e))?;
+        tracing::info!("Saved reminders");
+        Ok(())
     }
 
     pub fn on_date<S: Into<String>>(&mut self, date: Date, reminder: S) {
         self.dated.entry(date).or_default().push(reminder.into());
     }
 
+    pub fn every(&mut self, clock: &impl Clock, interval: &RepeatingDate, reminder: &str) {
+        let start = clock.today();
+        self.intervals.push(RepeatingReminder {
+            start,
+            interval: interval.clone(),
+            reminder: reminder.to_string(),
+        });
+    }
+
+    #[tracing::instrument(name = "Loading todays reminders", skip(self, clock))]
     pub fn for_today(&self, clock: &impl Clock) -> Vec<String> {
         let today = clock.today();
 
@@ -98,15 +117,6 @@ impl Reminders {
         }
 
         reminders
-    }
-
-    pub fn every(&mut self, clock: &impl Clock, interval: &RepeatingDate, reminder: &str) {
-        let start = clock.today();
-        self.intervals.push(RepeatingReminder {
-            start,
-            interval: interval.clone(),
-            reminder: reminder.to_string(),
-        });
     }
 }
 
@@ -139,10 +149,9 @@ impl SpecificDate {
     pub fn next_date(self, current: Date) -> Date {
         match self {
             Self::OnDate(date) => date,
-            Self::OnDayMonth(day, month) => {
-                Date::from_calendar_date(current.year(), month, day).expect("Day should have existed")
-            }
-            Self::Next(weekday) => current.next(weekday)
+            Self::OnDayMonth(day, month) => Date::from_calendar_date(current.year(), month, day)
+                .expect("Day should have existed"),
+            Self::Next(weekday) => current.next(weekday),
         }
     }
 }
@@ -172,7 +181,8 @@ impl FromStr for SpecificDate {
                 Ok(SpecificDate::Next(weekday))
             }
             _ => Err(
-                "No matching date format found. Use day.month or day.monty.year or weekday.".to_string(),
+                "No matching date format found. Use day.month or day.monty.year or weekday."
+                    .to_string(),
             ),
         }
     }
