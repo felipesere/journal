@@ -240,7 +240,7 @@ async fn main() -> Result<()> {
                 None
             };
 
-            let reminders = if config.reminders.is_some() {
+            let reminders = if let Some(ReminderConfig { enabled: true }) = config.reminders {
                 let location = config.dir.join("reminders.json");
                 let reminders = Reminders::load(&location)?;
 
