@@ -306,6 +306,7 @@ mod test {
                     indoc::indoc! { r#"
                         dir: file/from/yaml
                         pull_requests:
+                          enabled: true
                           auth:
                             personal_access_token: "my-access-token"
                           select:

@@ -17,10 +17,15 @@ pub struct PullRequestConfig {
     auth: Auth,
     #[serde(rename = "select")]
     selections: Vec<PrSelector>,
+    enabled: bool,
 }
 
 impl PullRequestConfig {
     pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
+        if !self.enabled {
+            return Ok(Vec::new());
+        }
+
         let Auth::PersonalAccessToken(ref token) = self.auth;
 
         let octocrab = OctocrabBuilder::new()
@@ -248,8 +253,9 @@ mod tests {
         use indoc::indoc;
 
         #[test]
-        fn parse_localfilter_with_multiple_values() -> Result<()> {
+        fn parse_config() -> Result<()> {
             let input = indoc! { r#"
+            enabled: true
             auth:
               personal_access_token: abc
             select:
