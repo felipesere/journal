@@ -8,7 +8,7 @@ use figment::{
 
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use time::OffsetDateTime;
+use time::{format_description::FormatItem, OffsetDateTime};
 use tracing::Level;
 
 use github::PullRequestConfig;
@@ -34,6 +34,9 @@ struct Config {
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
     Uncased::new(input.as_str().replace("__", "."))
 }
+
+const YEAR_MONTH_DAY: &'static [FormatItem] =
+    time::macros::format_description!("[year]-[month]-[day]");
 
 impl Config {
     fn load() -> Result<Self, figment::Error> {
@@ -122,7 +125,7 @@ fn normalize_filename(raw: &str) -> String {
     r.replace_all(&lower, "").to_string()
 }
 
-fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
+fn execute_reminder(cmd: ReminderCmd, config: Config, clock: &impl Clock) -> Result<()> {
     let with_reminders = config
         .reminders
         .as_ref()
@@ -177,22 +180,20 @@ fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
         } => {
             tracing::info!("intention to create a new reminder");
 
-            let clock = WallClock;
             if let Some(date_spec) = specific_date_spec {
                 let next = date_spec.next_date(clock.today());
 
                 reminders_storage.on_date(next, reminder.clone());
 
-                let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
                 println!(
                     "Added a reminder for '{}' on '{}'",
                     reminder,
-                    next.format(&year_month_day)?
+                    next.format(YEAR_MONTH_DAY)?
                 );
             }
 
             if let Some(interval_spec) = interval_spec {
-                reminders_storage.every(&clock, &interval_spec, &reminder);
+                reminders_storage.every(clock, &interval_spec, &reminder);
 
                 println!(
                     "Added a reminder for '{}' every '{}'",
@@ -218,10 +219,11 @@ async fn main() -> Result<()> {
     let config = Config::load().context("Failed to load configuration")?;
     let cli = Cli::parse();
     let journal = Journal::new_at(config.dir.clone());
+    let clock = WallClock;
 
     match cli.cmd {
         Cmd::Reminder(cmd) => {
-            execute_reminder(cmd, config)?;
+            execute_reminder(cmd, config, &clock)?;
         }
         Cmd::New {
             title,
@@ -240,7 +242,6 @@ async fn main() -> Result<()> {
 
             let reminders = if config.reminders.is_some() {
                 let location = config.dir.join("reminders.json");
-                let clock = WallClock;
                 let reminders = Reminders::load(&location)?;
 
                 Some(reminders.for_today(&clock))
