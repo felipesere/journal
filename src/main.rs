@@ -35,8 +35,7 @@ fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
     Uncased::new(input.as_str().replace("__", "."))
 }
 
-const YEAR_MONTH_DAY: &'static [FormatItem] =
-    time::macros::format_description!("[year]-[month]-[day]");
+const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
 
 impl Config {
     fn load() -> Result<Self, figment::Error> {
