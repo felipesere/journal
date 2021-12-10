@@ -107,7 +107,7 @@ fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
 }
 
 fn init_logs() {
-    let level = std::env::var("JOURNAL_LOG_LEVEL")
+    let level = std::env::var("JOURNAL__LOG_LEVEL")
         .map_err(|_| ())
         .and_then(to_level)
         .unwrap_or(Level::ERROR);
