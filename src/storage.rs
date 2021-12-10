@@ -100,4 +100,23 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.markdown, "first content");
     }
+
+    #[test]
+    fn ignores_non_markdown_files() {
+        let dir = TempDir::new().unwrap();
+        dir.child("2021-07-03-older_entry.md")
+            .write_str("real content")
+            .unwrap();
+        dir.child("zzz.json")
+            .write_str("{}")
+            .unwrap();
+
+        let journal = Journal::new_at(dir.path());
+
+        let entry = journal.latest_entry();
+
+        assert!(entry.is_ok());
+        let entry = entry.unwrap();
+        assert_eq!(entry.markdown, "real content");
+    }
 }
