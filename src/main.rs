@@ -122,29 +122,22 @@ fn normalize_filename(raw: &str) -> String {
     r.replace_all(&lower, "").to_string()
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    init_logs();
-
-    let config = Config::load().context("Failed to load configuration")?;
-    let cli = Cli::parse();
-    let journal = Journal::new_at(config.dir.clone());
-
+fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
     let with_reminders = config
         .reminders
         .as_ref()
         .map(|c| c.enabled)
         .unwrap_or(false);
 
-    match cli.cmd {
-        Cmd::Reminder(ReminderCmd::Delete { nr }) => {
-            if !with_reminders {
-                println!("No reminder configuration set. Please add it first");
-                return Ok(());
-            }
+    if !with_reminders {
+        println!("No reminder configuration set. Please add it first");
+        return Ok(());
+    }
+    match cmd {
+        ReminderCmd::Delete { nr } => {
             tracing::info!("intention to delete reminder");
 
-            let location = config.dir.clone().join("reminders.json");
+            let location = config.dir.join("reminders.json");
 
             let mut reminders_storage = Reminders::load(&location)?;
 
@@ -157,11 +150,7 @@ async fn main() -> Result<()> {
             tracing::info!("Saved reminders");
             println!("Deleted {}", nr,);
         }
-        Cmd::Reminder(ReminderCmd::List) => {
-            if !with_reminders {
-                println!("No reminder configuration set. Please add it first");
-                return Ok(());
-            }
+        ReminderCmd::List => {
             tracing::info!("intention to list reminders");
             let location = config.dir.join("reminders.json");
 
@@ -189,15 +178,11 @@ async fn main() -> Result<()> {
 
             println!("{}", table);
         }
-        Cmd::Reminder(ReminderCmd::New {
+        ReminderCmd::New {
             on_date: specific_date_spec,
             every: interval_spec,
             reminder,
-        }) => {
-            if !with_reminders {
-                println!("No reminder configuration set. Please add it first");
-                return Ok(());
-            }
+        } => {
             tracing::info!("intention to create a new reminder");
             let location = config.dir.join("reminders.json");
 
@@ -234,6 +219,23 @@ async fn main() -> Result<()> {
                     reminder, interval_spec,
                 );
             }
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    init_logs();
+
+    let config = Config::load().context("Failed to load configuration")?;
+    let cli = Cli::parse();
+    let journal = Journal::new_at(config.dir.clone());
+
+    match cli.cmd {
+        Cmd::Reminder(cmd) => {
+            execute_reminder(cmd, config)?;
         }
         Cmd::New {
             title,

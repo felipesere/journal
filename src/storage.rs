@@ -107,9 +107,7 @@ mod tests {
         dir.child("2021-07-03-older_entry.md")
             .write_str("real content")
             .unwrap();
-        dir.child("zzz.json")
-            .write_str("{}")
-            .unwrap();
+        dir.child("zzz.json").write_str("{}").unwrap();
 
         let journal = Journal::new_at(dir.path());
 
