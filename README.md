@@ -1,3 +1,5 @@
+[![codecov](https://codecov.io/gh/felipesere/journal/branch/main/graph/badge.svg?token=Z6YMTZ77FR)](https://codecov.io/gh/felipesere/journal)
+
 # `journal` in Rust
 
 Journal is a simple tool to keep track of TODOs & notes in simple Markdown files.
