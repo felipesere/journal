@@ -1,3 +1,4 @@
+![example workflow](https://github.com/felipesere/journal/actions/workflows/action.yml/badge.svg)
 [![codecov](https://codecov.io/gh/felipesere/journal/branch/main/graph/badge.svg?token=Z6YMTZ77FR)](https://codecov.io/gh/felipesere/journal)
 
 # `journal` in Rust
