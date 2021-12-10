@@ -20,6 +20,13 @@ impl Journal {
         // Would still need a filter that matches naming convention
         let mut entries = std::fs::read_dir(&self.location)?
             .map(|res| res.map(|e| e.path()).unwrap())
+            .filter(|path| {
+                if let Some(ext) = path.extension() {
+                    ext == "md"
+                } else {
+                    false
+                }
+            })
             .collect::<Vec<_>>();
 
         // The order in which `read_dir` returns entries is not guaranteed. If reproducible
