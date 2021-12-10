@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{AppSettings, Parser};
+use clap::{AppSettings, StructOpt};
 use figment::{
     providers::{Env, Format, Yaml},
     value::{Uncased, UncasedStr},
@@ -55,7 +55,7 @@ impl Config {
 }
 
 /// Commands and arguments passed via the command line
-#[derive(Debug, Parser)]
+#[derive(Debug, StructOpt)]
 #[clap(
     name = "fern",
     version = "0.0.3",
@@ -67,7 +67,7 @@ struct Cli {
     cmd: Cmd,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, StructOpt)]
 enum Cmd {
     New {
         title: String,
@@ -78,7 +78,7 @@ enum Cmd {
     Reminder(ReminderCmd),
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, StructOpt)]
 #[clap(alias = "reminders")]
 enum ReminderCmd {
     /// Add a new reminder, either on a specific date or recurring.
