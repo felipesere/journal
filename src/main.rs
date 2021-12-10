@@ -133,28 +133,20 @@ fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
         println!("No reminder configuration set. Please add it first");
         return Ok(());
     }
+
+    let location = config.dir.join("reminders.json");
+    let mut reminders_storage = Reminders::load(&location)?;
+
     match cmd {
         ReminderCmd::Delete { nr } => {
             tracing::info!("intention to delete reminder");
 
-            let location = config.dir.join("reminders.json");
-
-            let mut reminders_storage = Reminders::load(&location)?;
-
             reminders_storage.delete(nr)?;
 
-            reminders_storage
-                .save(&location)
-                .context("Failed to save reminders")?;
-
-            tracing::info!("Saved reminders");
             println!("Deleted {}", nr,);
         }
         ReminderCmd::List => {
             tracing::info!("intention to list reminders");
-            let location = config.dir.join("reminders.json");
-
-            let reminders_storage = Reminders::load(&location)?;
 
             let reminders = reminders_storage.all();
             // temp:
@@ -184,21 +176,13 @@ fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
             reminder,
         } => {
             tracing::info!("intention to create a new reminder");
-            let location = config.dir.join("reminders.json");
-
-            let mut reminders = Reminders::load(&location)?;
 
             let clock = WallClock;
             if let Some(date_spec) = specific_date_spec {
                 let next = date_spec.next_date(clock.today());
 
-                reminders.on_date(next, reminder.clone());
+                reminders_storage.on_date(next, reminder.clone());
 
-                reminders
-                    .save(&location)
-                    .context("Failed to save reminders")?;
-
-                tracing::info!("Saved reminders");
                 let year_month_day = time::macros::format_description!("[year]-[month]-[day]");
                 println!(
                     "Added a reminder for '{}' on '{}'",
@@ -208,11 +192,7 @@ fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
             }
 
             if let Some(interval_spec) = interval_spec {
-                reminders.every(&clock, &interval_spec, &reminder);
-
-                reminders
-                    .save(&location)
-                    .context("Failed to save reminders")?;
+                reminders_storage.every(&clock, &interval_spec, &reminder);
 
                 println!(
                     "Added a reminder for '{}' every '{}'",
@@ -221,6 +201,12 @@ fn execute_reminder(cmd: ReminderCmd, config: Config) -> Result<()> {
             }
         }
     }
+
+    reminders_storage
+        .save(&location)
+        .context("Failed to save reminders")?;
+
+    tracing::info!("Saved reminders");
 
     Ok(())
 }
