@@ -310,7 +310,6 @@ impl Display for RepeatingDate {
 pub enum Period {
     Days,
     Weeks,
-    Months,
 }
 
 impl Mul<&Period> for &usize {
@@ -320,7 +319,6 @@ impl Mul<&Period> for &usize {
         let rhs = match rhs {
             Period::Days => 1,
             Period::Weeks => 7,
-            Period::Months => 30, // TODO: indicator that is clearly not OK with months...
         };
 
         (*self as i32) * rhs
@@ -341,7 +339,6 @@ impl FromStr for RepeatingDate {
             let period = match period {
                 "days" => Period::Days,
                 "weeks" => Period::Weeks,
-                "months" => Period::Months,
                 _ => return Err(format!("unknown period: {}", period)),
             };
 
@@ -600,7 +597,6 @@ mod tests {
             - weekday ("Wednesday", Ok(super::RepeatingDate::Weekday(super::Weekday::Wednesday)))
             - n_days ("2.days", Ok(super::RepeatingDate::Periodic{amount: 2, period: super::Period::Days}))
             - n_weeks ("7.weeks", Ok(super::RepeatingDate::Periodic{amount: 7, period: super::Period::Weeks}))
-            - n_months ("3.months", Ok(super::RepeatingDate::Periodic{amount: 3, period: super::Period::Months}))
             - negative_amount ("-1.months", Err("invalid digit found in string".into()))
             - unknown_period ("1.fortnights", Err("unknown period: fortnights".into()))
             - missing_separator ("quaselgoop", Err("Unrecognized format for repeating date: quaselgoop".into()))
