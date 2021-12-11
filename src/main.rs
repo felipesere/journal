@@ -1,20 +1,19 @@
 use anyhow::{Context, Result};
 use clap::{AppSettings, StructOpt};
+use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, ContentArrangement, Table};
 use figment::{
     providers::{Env, Format, Yaml},
     value::{Uncased, UncasedStr},
     Figment,
 };
-
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
 use time::{format_description::FormatItem, OffsetDateTime};
 use tracing::Level;
 
 use github::PullRequestConfig;
-use storage::Journal;
-
 use reminders::{Clock, ReminderConfig, Reminders, RepeatingDate, SpecificDate, WallClock};
+use storage::Journal;
 use template::Template;
 
 mod github;
@@ -152,9 +151,6 @@ fn execute_reminder(cmd: ReminderCmd, config: Config, clock: &impl Clock) -> Res
 
             let reminders = reminders_storage.all();
             // temp:
-            use comfy_table::{
-                modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, ContentArrangement, Table,
-            };
             let mut table = Table::new();
             table
                 .load_preset(UTF8_FULL)
