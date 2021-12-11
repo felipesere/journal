@@ -218,11 +218,11 @@ impl std::fmt::Debug for Auth {
 
 #[derive(Debug, Serialize)]
 pub struct Pr {
-    author: String,
-    labels: HashSet<String>,
-    repo: String,
-    title: String,
-    url: String,
+    pub(crate) author: String,
+    pub(crate) labels: HashSet<String>,
+    pub(crate) repo: String,
+    pub(crate) title: String,
+    pub(crate) url: String,
 }
 
 impl From<&PullRequest> for Pr {

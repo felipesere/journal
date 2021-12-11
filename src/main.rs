@@ -248,7 +248,7 @@ async fn main() -> Result<()> {
                 None
             };
 
-            let today = OffsetDateTime::now_utc();
+            let today = OffsetDateTime::now_utc().date();
 
             let template = Template {
                 title: title.clone(),
