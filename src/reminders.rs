@@ -59,11 +59,6 @@ pub struct Reminders {
 }
 
 impl Reminders {
-    #[cfg(test)]
-    pub fn new() -> Self {
-        Self { stored: Vec::new() }
-    }
-
     #[tracing::instrument(err, name = "Loading reminders from disk")]
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read(path)
@@ -411,33 +406,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn large_in_memory_test() -> Result<()> {
-        let mut clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::new();
+    fn reminders() -> (TempDir, Reminders) {
+        let dir = TempDir::new().unwrap();
+        dir.child("reminders.json")
+            .write_str(r#"{"stored": [] }"#)
+            .unwrap();
 
-        reminders.on_date(clock.after(3.days()), "Email someone");
+        let reminders = Reminders::load(&dir.path().join("reminders.json")).unwrap();
 
-        let todays_reminders = reminders.for_today(&clock);
-        assert!(todays_reminders.is_empty());
-
-        clock.advance_by(3.days());
-
-        let todays_reminders = reminders.for_today(&clock);
-        assert_eq!(todays_reminders, vec!["Email someone".to_string()]);
-
-        clock.advance_by(1.days());
-        let todays_reminders = reminders.for_today(&clock);
-        assert!(todays_reminders.is_empty());
-
-        Ok(())
+        (dir, reminders)
     }
 
     #[test]
     fn repeating_reminders() -> Result<()> {
         use time::Weekday::*;
         let mut clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::new();
+        let (_dir, mut reminders) = reminders();
 
         clock.advance_to(Monday);
         reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "Email someone");
@@ -464,12 +448,7 @@ mod tests {
     fn adding_multiple_reminders_on_filesystem() -> Result<()> {
         let mut clock = ControlledClock::new(2021, July, 15)?;
 
-        let dir = TempDir::new().unwrap();
-        dir.child("reminders.json")
-            .write_str(r#"{"stored": [] }"#)
-            .unwrap();
-
-        let mut reminders = Reminders::load(&dir.path().join("reminders.json"))?;
+        let (_dir, mut reminders) = reminders();
 
         reminders.on_date(clock.after(3.days()), "First task");
         reminders.on_date(clock.after(4.days()), "Second task");
@@ -500,9 +479,10 @@ mod tests {
     #[test]
     fn lists_all_currently_tracked_reminders() -> Result<()> {
         // ..event past ones!
+
         use time::Weekday::*;
         let mut clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::new();
+        let (_dir, mut reminders) = reminders();
 
         clock.advance_to(Monday);
         reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "One");
@@ -520,7 +500,7 @@ mod tests {
     fn can_delete_reminders() -> Result<()> {
         use time::Weekday::*;
         let mut clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::new();
+        let (_dir, mut reminders) = reminders();
 
         clock.advance_to(Monday);
         reminders.every(&clock, &RepeatingDate::Weekday(Wednesday), "One");
@@ -551,7 +531,8 @@ mod tests {
     #[test]
     fn reports_when_the_number_to_delete_is_out_of_range() -> Result<()> {
         let clock = ControlledClock::new(2021, July, 15)?;
-        let mut reminders = Reminders::new();
+        let (_dir, mut reminders) = reminders();
+
         reminders.on_date(clock.today(), "Awesome");
         let result = reminders.delete(3);
 
