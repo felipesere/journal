@@ -6,9 +6,9 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::StructOpt;
-use comfy_table::{ContentArrangement, Table};
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
+use comfy_table::{ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
@@ -16,7 +16,6 @@ use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 use crate::Config;
 
 const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
-
 
 trait WeekdayExt {
     fn next(&self, weekday: Weekday) -> Date;
@@ -78,17 +77,6 @@ pub enum ReminderCmd {
 
 impl ReminderCmd {
     pub(crate) fn execute(self, config: Config, clock: &impl Clock) -> Result<()> {
-        let with_reminders = config
-            .reminders
-            .as_ref()
-            .map(|c| c.enabled)
-            .unwrap_or(false);
-
-        if !with_reminders {
-            println!("No reminder configuration set. Please add it first");
-            return Ok(());
-        }
-
         let location = config.dir.join("reminders.json");
         let mut reminders_storage = Reminders::load(&location)?;
 

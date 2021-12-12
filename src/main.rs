@@ -7,7 +7,7 @@ use figment::{
 };
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use time::{OffsetDateTime};
+use time::OffsetDateTime;
 use tracing::Level;
 
 use github::PullRequestConfig;
@@ -107,7 +107,19 @@ async fn main() -> Result<()> {
     let clock = WallClock;
 
     match cli.cmd {
-        Cmd::Reminder(cmd) =>  cmd.execute(config, &clock)?,
+        Cmd::Reminder(cmd) => {
+            let with_reminders = config
+                .reminders
+                .as_ref()
+                .map(|c| c.enabled)
+                .unwrap_or(false);
+
+            if !with_reminders {
+                println!("No reminder configuration set. Please add it first");
+            } else {
+                cmd.execute(config, &clock)?;
+            }
+        }
         Cmd::New {
             title,
             write_to_stdout,
