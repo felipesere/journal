@@ -5,8 +5,18 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
+use clap::StructOpt;
+use comfy_table::{ContentArrangement, Table};
+use comfy_table::modifiers::UTF8_ROUND_CORNERS;
+use comfy_table::presets::UTF8_FULL;
 use serde::{Deserialize, Serialize};
+use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
+
+use crate::Config;
+
+const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
+
 
 trait WeekdayExt {
     fn next(&self, weekday: Weekday) -> Date;
@@ -41,6 +51,115 @@ impl Clock for WallClock {
 #[derive(Deserialize)]
 pub struct ReminderConfig {
     pub enabled: bool,
+}
+
+#[derive(Debug, StructOpt)]
+#[clap(alias = "reminders")]
+pub enum ReminderCmd {
+    /// Add a new reminder, either on a specific date or recurring.
+    New {
+        #[clap(long = "on", group = "date_selection")]
+        on_date: Option<SpecificDate>,
+
+        #[clap(long = "every", group = "date_selection")]
+        every: Option<RepeatingDate>,
+
+        #[clap(takes_value(true))]
+        reminder: String,
+    },
+    /// List all existing reminders
+    List,
+    /// Delete a reminder
+    Delete {
+        /// The number to delete
+        nr: u32,
+    },
+}
+
+impl ReminderCmd {
+    pub(crate) fn execute(self, config: Config, clock: &impl Clock) -> Result<()> {
+        let with_reminders = config
+            .reminders
+            .as_ref()
+            .map(|c| c.enabled)
+            .unwrap_or(false);
+
+        if !with_reminders {
+            println!("No reminder configuration set. Please add it first");
+            return Ok(());
+        }
+
+        let location = config.dir.join("reminders.json");
+        let mut reminders_storage = Reminders::load(&location)?;
+
+        match self {
+            ReminderCmd::Delete { nr } => {
+                tracing::info!("intention to delete reminder");
+
+                reminders_storage.delete(nr)?;
+
+                println!("Deleted {}", nr,);
+            }
+            ReminderCmd::List => {
+                tracing::info!("intention to list reminders");
+
+                let reminders = reminders_storage.all();
+
+                let mut table = Table::new();
+                table
+                    .load_preset(UTF8_FULL)
+                    .apply_modifier(UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(ContentArrangement::Dynamic)
+                    .set_header(vec!["Nr", "Date", "Reminders"]);
+
+                for reminder in reminders {
+                    table.add_row(vec![
+                        reminder.nr.to_string(),
+                        format!("{}", reminder.date),
+                        reminder.reminder,
+                    ]);
+                }
+
+                println!("{}", table);
+            }
+            ReminderCmd::New {
+                on_date: specific_date_spec,
+                every: interval_spec,
+                reminder,
+            } => {
+                tracing::info!("intention to create a new reminder");
+
+                if let Some(date_spec) = specific_date_spec {
+                    let next = date_spec.next_date(clock.today());
+
+                    reminders_storage.on_date(next, reminder.clone());
+
+                    println!(
+                        "Added a reminder for '{}' on '{}'",
+                        reminder,
+                        next.format(YEAR_MONTH_DAY)?
+                    );
+                }
+
+                if let Some(interval_spec) = interval_spec {
+                    reminders_storage.every(clock, &interval_spec, &reminder);
+
+                    println!(
+                        "Added a reminder for '{}' every '{}'",
+                        reminder, interval_spec,
+                    );
+                }
+            }
+        }
+
+        reminders_storage
+            .save(&location)
+            .context("Failed to save reminders")?;
+
+        tracing::info!("Saved reminders");
+
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Serialize)]

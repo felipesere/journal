@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use clap::{AppSettings, StructOpt};
-use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, ContentArrangement, Table};
 use figment::{
     providers::{Env, Format, Yaml},
     value::{Uncased, UncasedStr},
@@ -8,11 +7,11 @@ use figment::{
 };
 use serde::Deserialize;
 use std::{path::PathBuf, str::FromStr};
-use time::{format_description::FormatItem, OffsetDateTime};
+use time::{OffsetDateTime};
 use tracing::Level;
 
 use github::PullRequestConfig;
-use reminders::{Clock, ReminderConfig, Reminders, RepeatingDate, SpecificDate, WallClock};
+use reminders::{ReminderCmd, ReminderConfig, Reminders, WallClock};
 use storage::Journal;
 use template::Template;
 
@@ -33,8 +32,6 @@ struct Config {
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
     Uncased::new(input.as_str().replace("__", "."))
 }
-
-const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
 
 impl Config {
     fn load() -> Result<Self, figment::Error> {
@@ -77,29 +74,6 @@ enum Cmd {
     Reminder(ReminderCmd),
 }
 
-#[derive(Debug, StructOpt)]
-#[clap(alias = "reminders")]
-enum ReminderCmd {
-    /// Add a new reminder, either on a specific date or recurring.
-    New {
-        #[clap(long = "on", group = "date_selection")]
-        on_date: Option<SpecificDate>,
-
-        #[clap(long = "every", group = "date_selection")]
-        every: Option<RepeatingDate>,
-
-        #[clap(takes_value(true))]
-        reminder: String,
-    },
-    /// List all existing reminders
-    List,
-    /// Delete a reminder
-    Delete {
-        /// The number to delete
-        nr: u32,
-    },
-}
-
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
     Level::from_str(level.as_ref()).map_err(|_| ())
 }
@@ -123,90 +97,6 @@ fn normalize_filename(raw: &str) -> String {
     r.replace_all(&lower, "").to_string()
 }
 
-fn execute_reminder(cmd: ReminderCmd, config: Config, clock: &impl Clock) -> Result<()> {
-    let with_reminders = config
-        .reminders
-        .as_ref()
-        .map(|c| c.enabled)
-        .unwrap_or(false);
-
-    if !with_reminders {
-        println!("No reminder configuration set. Please add it first");
-        return Ok(());
-    }
-
-    let location = config.dir.join("reminders.json");
-    let mut reminders_storage = Reminders::load(&location)?;
-
-    match cmd {
-        ReminderCmd::Delete { nr } => {
-            tracing::info!("intention to delete reminder");
-
-            reminders_storage.delete(nr)?;
-
-            println!("Deleted {}", nr,);
-        }
-        ReminderCmd::List => {
-            tracing::info!("intention to list reminders");
-
-            let reminders = reminders_storage.all();
-            // temp:
-            let mut table = Table::new();
-            table
-                .load_preset(UTF8_FULL)
-                .apply_modifier(UTF8_ROUND_CORNERS)
-                .set_content_arrangement(ContentArrangement::Dynamic)
-                .set_header(vec!["Nr", "Date", "Reminders"]);
-
-            for reminder in reminders {
-                table.add_row(vec![
-                    reminder.nr.to_string(),
-                    format!("{}", reminder.date),
-                    reminder.reminder,
-                ]);
-            }
-
-            println!("{}", table);
-        }
-        ReminderCmd::New {
-            on_date: specific_date_spec,
-            every: interval_spec,
-            reminder,
-        } => {
-            tracing::info!("intention to create a new reminder");
-
-            if let Some(date_spec) = specific_date_spec {
-                let next = date_spec.next_date(clock.today());
-
-                reminders_storage.on_date(next, reminder.clone());
-
-                println!(
-                    "Added a reminder for '{}' on '{}'",
-                    reminder,
-                    next.format(YEAR_MONTH_DAY)?
-                );
-            }
-
-            if let Some(interval_spec) = interval_spec {
-                reminders_storage.every(clock, &interval_spec, &reminder);
-
-                println!(
-                    "Added a reminder for '{}' every '{}'",
-                    reminder, interval_spec,
-                );
-            }
-        }
-    }
-
-    reminders_storage
-        .save(&location)
-        .context("Failed to save reminders")?;
-
-    tracing::info!("Saved reminders");
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logs();
@@ -217,9 +107,7 @@ async fn main() -> Result<()> {
     let clock = WallClock;
 
     match cli.cmd {
-        Cmd::Reminder(cmd) => {
-            execute_reminder(cmd, config, &clock)?;
-        }
+        Cmd::Reminder(cmd) =>  cmd.execute(config, &clock)?,
         Cmd::New {
             title,
             write_to_stdout,
