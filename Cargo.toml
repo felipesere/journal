@@ -25,6 +25,7 @@ tracing-subscriber = "0.2.0"
 
 [dev-dependencies]
 assert_fs = "1.0"
+assert_cmd = { version = "2.0.2", features = ["color-auto"] }
 data-test = "0.1.0"
 indoc = "1.0"
 serde_yaml = "0.8"
