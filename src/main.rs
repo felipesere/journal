@@ -53,9 +53,8 @@ impl Config {
 /// Commands and arguments passed via the command line
 #[derive(Debug, StructOpt)]
 #[clap(
-    name = "fern",
-    version = "0.0.3",
     author = "Felipe Sere <journal@felipesere.com>",
+    version,
     setting = AppSettings::DeriveDisplayOrder,
 )]
 struct Cli {
