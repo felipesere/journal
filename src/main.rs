@@ -128,9 +128,14 @@ async fn main() -> Result<()> {
             title,
             write_to_stdout,
         } => {
-            let latest_entry = journal.latest_entry()?;
-            let mut finder = todo::FindTodos::new();
-            let todos = finder.process(&latest_entry.markdown);
+            let todos = match journal.latest_entry() {
+                Ok(Some(latest_entry)) => {
+                    let mut finder = todo::FindTodos::new();
+                    finder.process(&latest_entry.markdown)
+                }
+                Ok(None) => Vec::new(),
+                Err(e) => return Err(anyhow::anyhow!(e)),
+            };
 
             let prs = if let Some(config) = config.pull_requests {
                 let prs = config.get_matching_prs().await?;

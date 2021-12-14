@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use std::path::PathBuf;
 
 pub struct Entry {
@@ -16,7 +16,7 @@ impl Journal {
         }
     }
 
-    pub fn latest_entry(&self) -> Result<Entry> {
+    pub fn latest_entry(&self) -> Result<Option<Entry>> {
         // Would still need a filter that matches naming convention
         let mut entries = std::fs::read_dir(&self.location)?
             .map(|res| res.map(|e| e.path()).unwrap())
@@ -37,10 +37,15 @@ impl Journal {
             let markdown = std::fs::read_to_string(&path)?;
             tracing::info!("Lastest entry found at {:?}", path);
 
-            return Ok(Entry { markdown });
-        }
+            Ok(Some(Entry { markdown }))
+        } else {
+            tracing::info!(
+                "No journal entries found in {}",
+                self.location.to_string_lossy()
+            );
 
-        bail!("No journal entries found in {:?}", self.location);
+            Ok(None)
+        }
     }
 
     pub fn add_entry(&self, name: &str, data: &str) -> Result<()> {
@@ -63,7 +68,8 @@ mod tests {
 
         let entry = journal.latest_entry();
 
-        assert!(entry.is_err());
+        assert!(entry.is_ok());
+        assert!(entry.unwrap().is_none())
     }
 
     #[test]
@@ -78,7 +84,7 @@ mod tests {
         let entry = journal.latest_entry();
 
         assert!(entry.is_ok());
-        let entry = entry.unwrap();
+        let entry = entry.unwrap().unwrap();
         assert_eq!(entry.markdown, "first content");
     }
 
@@ -97,7 +103,7 @@ mod tests {
         let entry = journal.latest_entry();
 
         assert!(entry.is_ok());
-        let entry = entry.unwrap();
+        let entry = entry.unwrap().unwrap();
         assert_eq!(entry.markdown, "first content");
     }
 
@@ -114,7 +120,7 @@ mod tests {
         let entry = journal.latest_entry();
 
         assert!(entry.is_ok());
-        let entry = entry.unwrap();
+        let entry = entry.unwrap().unwrap();
         assert_eq!(entry.markdown, "real content");
     }
 }
