@@ -8,7 +8,7 @@ It also supports Github PRs and Reminders.
 
 ## Configuration
 
-Configuration can be placed anywhere and referenced with `JOURNAL_CONFIG` which defaults to `$HOME/journal.config.yml`.
+Configuration can be placed anywhere and referenced with `JOURNAL__CONFIG` which defaults to `$HOME/journal.config.yml`.
 
 The minimal content of the config should look like this:
 
