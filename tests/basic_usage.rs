@@ -66,3 +66,111 @@ fn reads_journal_config_from_the_home_directory() {
             .unwrap(),
         );
 }
+
+fn today() -> String {
+    let today = time::OffsetDateTime::now_utc().date();
+    format!("{}-{}-{}", today.year(), today.month() as u8, today.day())
+}
+
+#[test]
+fn creates_a_new_journal_entry() {
+    let fake_journal_directory = TempDir::new().unwrap();
+
+    let fake_home_dir = TempDir::new().unwrap();
+    fake_home_dir
+        .child(".journal.yaml")
+        .write_str(&format!(
+            "dir: {}",
+            fake_journal_directory.to_str().unwrap()
+        ))
+        .unwrap();
+
+    journal()
+        .env_clear()
+        .env("HOME", fake_home_dir.path())
+        .args(&["new", "Through the Looking-Glass"])
+        .assert()
+        .success();
+
+    fake_journal_directory
+        .child(format!(
+            "{date}-through-the-looking-glass.md",
+            date = today()
+        ))
+        .assert(indoc::formatdoc! {r#"
+        # Through the Looking-Glass on {date}
+
+        ## Notes
+
+        > This is where your notes will go!
+
+        ## TODOs
+
+
+
+
+        "#, date=today()});
+}
+
+#[test]
+fn removes_todos_that_are_already_checked() {
+    let fake_journal_directory = TempDir::new().unwrap();
+    fake_journal_directory
+        .child("a-previous-file.md")
+        .write_str(indoc::indoc! { r#"
+        # Through the Looking-Glass on {date}
+
+        ## Notes
+
+        > This is where your notes will go!
+
+        ## TODOs
+
+        * [ ] This one will stay
+
+        * [x] Be gone!
+
+        * [ ] Yay!
+
+        "#})
+        .unwrap();
+
+    let fake_home_dir = TempDir::new().unwrap();
+    fake_home_dir
+        .child(".journal.yaml")
+        .write_str(&format!(
+            "dir: {journal}",
+            journal = fake_journal_directory.to_str().unwrap()
+        ))
+        .unwrap();
+
+    journal()
+        .env_clear()
+        .env("HOME", fake_home_dir.path())
+        .args(&["new", "Through the Looking-Glass"])
+        .assert()
+        .success();
+
+    fake_journal_directory
+        .child(format!(
+            "{date}-through-the-looking-glass.md",
+            date = today()
+        ))
+        .assert(indoc::formatdoc! {r#"
+        # Through the Looking-Glass on {date}
+
+        ## Notes
+
+        > This is where your notes will go!
+
+        ## TODOs
+
+        * [ ] This one will stay
+
+        * [ ] Yay!
+
+
+
+
+        "#, date=today()});
+}
