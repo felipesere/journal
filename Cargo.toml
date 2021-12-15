@@ -11,6 +11,7 @@ dirs = "4.0.0"
 figment = { version = "0.10.6", features = ["test", "env", "yaml"] }
 futures = { version = "0.3" }
 octocrab = { version = "0.12" }
+open = { version = "2.0.2" }
 pulldown-cmark = { version = "0.8.0" }
 pulldown-cmark-to-cmark = { version = "7.1.0" }
 regex = { version = "1.5" }

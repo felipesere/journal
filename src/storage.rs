@@ -48,10 +48,10 @@ impl Journal {
         }
     }
 
-    pub fn add_entry(&self, name: &str, data: &str) -> Result<()> {
+    pub fn add_entry(&self, name: &str, data: &str) -> Result<PathBuf> {
         let path = self.location.join(name);
-        std::fs::write(path, data)?;
-        Ok(())
+        std::fs::write(&path, data)?;
+        Ok(path)
     }
 }
 
