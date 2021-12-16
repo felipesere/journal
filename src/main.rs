@@ -1,10 +1,10 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use journal::{Cli, Config, WallClock, run};
-use tracing::Level;
 use anyhow::{Context, Result};
 use clap::StructOpt;
+use journal::{run, Cli, Config, WallClock};
+use tracing::Level;
 
 fn to_level<S: AsRef<str>>(level: S) -> Result<Level, ()> {
     Level::from_str(level.as_ref()).map_err(|_| ())
