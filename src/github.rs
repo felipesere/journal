@@ -7,12 +7,12 @@ use octocrab::{
     models::{pulls::PullRequest, Repository},
     Octocrab, OctocrabBuilder, Page,
 };
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
 /// Configuration for how journal should get outstanding Pull/Merge requests
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestConfig {
     auth: Auth,
     #[serde(rename = "select")]
@@ -61,7 +61,7 @@ impl PullRequestConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct PrSelector {
     #[serde(flatten)]
     origin: Origin,
@@ -120,7 +120,7 @@ impl PrSelector {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 enum Origin {
     #[serde(rename = "org")]
     Organisation(String),
@@ -132,6 +132,15 @@ enum Origin {
 struct Repo {
     owner: String,
     name: String,
+}
+
+impl Serialize for Repo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{}/{}", self.owner, self.name))
+    }
 }
 
 impl FromStr for Repo {
@@ -191,16 +200,16 @@ fn extract_repo(org: &str, page: &mut Page<Repository>) -> Vec<Repo> {
         .collect()
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct LocalFilter {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
     pub(crate) authors: HashSet<String>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
     pub(crate) labels: HashSet<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 enum Auth {
     #[serde(rename = "personal_access_token")]
     PersonalAccessToken(String),
@@ -364,7 +373,7 @@ mod tests {
         }
 
         fn set(input: &[&str]) -> HashSet<String> {
-            input.into_iter().map(ToString::to_string).collect()
+            input.iter().map(ToString::to_string).collect()
         }
     }
 }

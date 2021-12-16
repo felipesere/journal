@@ -16,7 +16,8 @@ pulldown-cmark = { version = "0.8.0" }
 pulldown-cmark-to-cmark = { version = "7.1.0" }
 regex = { version = "1.5" }
 serde = { version = "1.0.130", features = ["derive" ] }
-serde_json = {version = "1.0" }
+serde_json = { version = "1.0" }
+serde_yaml = { version  = "0.8" }
 tokio = { version = "1", features = ["full"] }
 tera = { version = "1", default-features = false }
 time = { version = "0.3.5", features = ["formatting", "macros", "parsing", "serde","serde-human-readable", "std"] }
@@ -30,5 +31,4 @@ assert_cmd = { version = "2.0.2", features = ["color-auto"] }
 data-test = "0.1.0"
 indoc = "1.0"
 predicates = "2.1"
-serde_yaml = "0.8"
 tracing-test = "0.2.1"

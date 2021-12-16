@@ -47,7 +47,7 @@ impl Clock for WallClock {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ReminderConfig {
     pub enabled: bool,
 }
@@ -151,6 +151,7 @@ impl ReminderCmd {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 enum InnerReminder {
     Concrete(Date, String),
     Recurring {
@@ -392,6 +393,7 @@ fn parse_month(month: &str) -> Result<Month, String> {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum RepeatingDate {
     Weekday(Weekday),
     Periodic { amount: usize, period: Period },
@@ -467,7 +469,7 @@ mod tests {
 
     impl Clock for ControlledClock {
         fn today(&self) -> Date {
-            self.current_date.clone()
+            self.current_date
         }
     }
 
@@ -698,7 +700,7 @@ mod tests {
         fn parse_config() -> Result<()> {
             let input = r#"enabled: true"#;
 
-            let config: ReminderConfig = serde_yaml::from_str(&input).unwrap();
+            let config: ReminderConfig = serde_yaml::from_str(input).unwrap();
 
             assert!(config.enabled);
 
@@ -712,7 +714,7 @@ mod tests {
         #[test]
         fn specifics_dates_are_their_own_next_date() {
             let jan_15_2022 = date!(2022 - 01 - 15);
-            let specific_date = SpecificDate::OnDate(jan_15_2022.clone());
+            let specific_date = SpecificDate::OnDate(jan_15_2022);
 
             let next_date = specific_date.next_date(date!(2022 - 01 - 10));
 
