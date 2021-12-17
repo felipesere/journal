@@ -14,7 +14,7 @@ use tracing::{instrument, Instrument};
 /// Configuration for how journal should get outstanding Pull/Merge requests
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestConfig {
-    auth: Auth,
+    pub(crate) auth: Auth,
     #[serde(rename = "select")]
     selections: Vec<PrSelector>,
     enabled: bool,
@@ -209,8 +209,8 @@ pub(crate) struct LocalFilter {
     pub(crate) labels: HashSet<String>,
 }
 
-#[derive(Deserialize, Serialize)]
-enum Auth {
+#[derive(Deserialize, PartialEq, Eq, Serialize)]
+pub(crate) enum Auth {
     #[serde(rename = "personal_access_token")]
     PersonalAccessToken(String),
 }
