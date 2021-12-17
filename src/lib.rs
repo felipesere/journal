@@ -56,7 +56,7 @@ where
     let journal = Journal::new_at(config.dir.clone());
 
     match cli.cmd {
-        Cmd::Config(cmd) => cmd.execute(config),
+        Cmd::Config(cmd) => cmd.execute(config)?,
         Cmd::Reminder(cmd) => {
             let with_reminders = config
                 .reminders
