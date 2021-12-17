@@ -15,8 +15,7 @@ use tracing::{instrument, Instrument};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestConfig {
     pub(crate) auth: Auth,
-    #[serde(rename = "select")]
-    selections: Vec<PrSelector>,
+    select: Vec<PrSelector>,
     enabled: bool,
 }
 
@@ -33,10 +32,10 @@ impl PullRequestConfig {
             .build()?;
         let user = octocrab.current().user().await?;
         tracing::info!("Logged into GitHub as {}", user.login);
-        tracing::info!("Selections for PRs: {:?}", self.selections);
+        tracing::info!("Selections for PRs: {:?}", self.select);
 
         let mut join_handles = Vec::new();
-        for selector in &self.selections {
+        for selector in &self.select {
             let selector = selector.clone();
             let token = token.clone();
             let handle: JoinHandle<Result<Vec<Pr>>> = tokio::spawn(
@@ -276,8 +275,8 @@ mod tests {
             };
 
             let pr_config: PullRequestConfig = serde_yaml::from_str(input)?;
-            assert_eq!(pr_config.selections.len(), 1);
-            let selection = &pr_config.selections[0];
+            assert_eq!(pr_config.select.len(), 1);
+            let selection = &pr_config.select[0];
 
             assert!(selection.filter.labels.contains("foo"));
             assert!(selection.filter.labels.contains("bar"));
