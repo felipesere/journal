@@ -3,6 +3,9 @@ name = "journal"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+doctest = false
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "3.0.0-rc.3", features = ["derive"] }
