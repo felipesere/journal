@@ -623,14 +623,14 @@ mod tests {
         reminders.delete(3)?; // should be the "Three"
         assert_eq!(reminders.all().len(), 4);
 
-        let exissting_remindests = reminders
+        let existing_reminders = reminders
             .all()
             .into_iter()
             .map(|reminders| reminders.reminder)
             .collect::<Vec<_>>();
 
         assert_eq!(
-            exissting_remindests,
+            existing_reminders,
             &["One", "Two", /* deleted: Three */ "Four", "Five"]
         );
 
