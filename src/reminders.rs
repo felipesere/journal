@@ -76,7 +76,7 @@ pub enum ReminderCmd {
 }
 
 impl ReminderCmd {
-    pub(crate) fn execute(self, config: Config, clock: &impl Clock) -> Result<()> {
+    pub(crate) fn execute(self, config: &Config, clock: &impl Clock) -> Result<()> {
         let location = config.dir.join("reminders.json");
         let mut reminders_storage = Reminders::load(&location)?;
 

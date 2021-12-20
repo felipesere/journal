@@ -33,5 +33,5 @@ async fn main() -> Result<()> {
     let clock = WallClock;
     let open = |path: &Path| open::that(path).map_err(|e| anyhow::anyhow!(e));
 
-    run(cli, config, clock, open).await
+    run(cli, &config, &clock, open).await
 }

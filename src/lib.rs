@@ -49,7 +49,7 @@ fn normalize_filename(raw: &str) -> String {
     r.replace_all(&lower, "").to_string()
 }
 
-pub async fn run<O>(cli: Cli, config: Config, clock: impl Clock, open: O) -> Result<()>
+pub async fn run<O>(cli: Cli, config: &Config, clock: &impl Clock, open: O) -> Result<()>
 where
     O: FnOnce(&Path) -> Result<()>,
 {
@@ -67,7 +67,7 @@ where
             if !with_reminders {
                 println!("No reminder configuration set. Please add it first");
             } else {
-                cmd.execute(config, &clock)?;
+                cmd.execute(config, clock)?;
             }
         }
         Cmd::New {
@@ -83,7 +83,7 @@ where
                 Err(e) => return Err(anyhow::anyhow!(e)),
             };
 
-            let prs = if let Some(config) = config.pull_requests {
+            let prs = if let Some(ref config) = config.pull_requests {
                 let prs = config.get_matching_prs().await?;
                 Some(prs)
             } else {
@@ -94,7 +94,7 @@ where
                 let location = config.dir.join("reminders.json");
                 let reminders = Reminders::load(&location)?;
 
-                Some(reminders.for_today(&clock))
+                Some(reminders.for_today(clock))
             } else {
                 None
             };

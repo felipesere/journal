@@ -18,10 +18,10 @@ pub enum ConfigCmd {
 }
 
 impl ConfigCmd {
-    pub fn execute(&self, config: Config) -> Result<()> {
+    pub fn execute(&self, config: &Config) -> Result<()> {
         match self {
             ConfigCmd::Show => {
-                serde_yaml::to_writer(std::io::stdout(), &config).map_err(|e| anyhow::anyhow!(e))
+                serde_yaml::to_writer(std::io::stdout(), config).map_err(|e| anyhow::anyhow!(e))
             }
         }
     }
