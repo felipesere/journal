@@ -454,44 +454,17 @@ impl FromStr for RepeatingDate {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "controlled_clock.rs"]
+mod controlled_clock;
 
-    use std::ops::Add;
+#[cfg(test)]
+mod tests {
+    use super::controlled_clock::ControlledClock;
+    use super::*;
 
     use anyhow::Result;
     use assert_fs::{prelude::*, TempDir};
-    use time::{ext::NumericalDuration, macros::date, Date, Duration, Month, Month::*};
-
-    struct ControlledClock {
-        current_date: Date,
-    }
-
-    impl Clock for ControlledClock {
-        fn today(&self) -> Date {
-            self.current_date
-        }
-    }
-
-    impl ControlledClock {
-        fn new(year: i32, month: Month, day: u8) -> Result<ControlledClock> {
-            let current_date = Date::from_calendar_date(year, month, day)?;
-            Ok(Self { current_date })
-        }
-
-        fn after(&self, duration: Duration) -> Date {
-            assert!(duration.is_positive());
-            self.current_date.add(duration)
-        }
-
-        pub(crate) fn advance_by(&mut self, days: Duration) {
-            self.current_date = self.current_date.add(days);
-        }
-
-        pub(crate) fn advance_to(&mut self, weekday: Weekday) {
-            self.current_date = self.current_date.next(weekday);
-        }
-    }
+    use time::{ext::NumericalDuration, macros::date, Month, Month::*};
 
     // the names had to be different to not clash with time-rs
     trait PeriodicExt {

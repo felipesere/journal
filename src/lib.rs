@@ -128,7 +128,65 @@ where
 }
 
 #[cfg(test)]
+#[path = "controlled_clock.rs"]
+mod controlled_clock;
+
+#[cfg(test)]
 mod test {
+    use std::sync::{Arc, Mutex};
+
+    use super::controlled_clock::ControlledClock;
+    use super::*;
+    use assert_fs::{prelude::*, TempDir};
+    use predicates::{path::exists, str::diff};
+    use time::ext::NumericalDuration;
+    use time::Month::April;
+
+    #[tokio::test]
+    async fn creats_various_entries_on_the_filesystem() -> Result<()> {
+        let journal_home = TempDir::new()?;
+        let config = Config {
+            dir: journal_home.to_path_buf(),
+            pull_requests: None,
+            reminders: None,
+        };
+        let open_was_called = Arc::new(Mutex::new(false));
+        let open = |_: &Path| {
+            *open_was_called.lock().unwrap() = true;
+
+            Ok(())
+        };
+        let mut clock = ControlledClock::new(2020, April, 22)?;
+
+        let cli = Cli::parse_from(&["journal", "new", "This is great"]);
+        run(cli, &config, &clock, open).await?;
+        assert!(*open_was_called.lock().unwrap());
+        journal_home
+            .child("2020-04-22-this-is-great.md")
+            .assert(exists());
+
+        clock.advance_by(1.days());
+        let cli = Cli::parse_from(&["journal", "new", "The Next One"]);
+        run(cli, &config, &clock, open).await?;
+        journal_home
+            .child("2020-04-23-the-next-one.md")
+            .assert(exists())
+            .assert(diff(indoc::indoc! {r#"
+                # The Next One on 2020-04-23
+
+                ## Notes
+
+                > This is where your notes will go!
+
+                ## TODOs
+
+
+
+
+                "#}));
+        Ok(())
+    }
+
     mod title {
         use data_test::data_test;
 
