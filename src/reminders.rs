@@ -103,7 +103,7 @@ impl ReminderCmd {
                 for reminder in reminders {
                     table.add_row(vec![
                         reminder.nr.to_string(),
-                        format!("{}", reminder.date),
+                        reminder.date.to_string(),
                         reminder.reminder,
                     ]);
                 }
@@ -252,9 +252,10 @@ impl Reminders {
         for reminder in &self.stored {
             match reminder {
                 InnerReminder::Concrete(date, reminder) => {
+                    let format = format_description::parse("[year]-[month]-[day]").unwrap();
                     result.push(Reminder {
                         nr,
-                        date: DateRepr::Exact(*date),
+                        date: date.format(&format).unwrap(),
                         reminder: reminder.to_string(),
                     });
                 }
@@ -263,7 +264,7 @@ impl Reminders {
                 } => {
                     result.push(Reminder {
                         nr,
-                        date: DateRepr::Repeating(interval.clone()),
+                        date: interval.to_string(),
                         reminder: reminder.to_string(),
                     });
                 }
@@ -286,26 +287,9 @@ impl Reminders {
     }
 }
 
-pub enum DateRepr {
-    Exact(Date),
-    Repeating(RepeatingDate),
-}
-
-impl Display for DateRepr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DateRepr::Exact(date) => {
-                let format = format_description::parse("[year]-[month]-[day]").unwrap();
-                write!(f, "{}", date.format(&format).unwrap())
-            }
-            DateRepr::Repeating(repeating) => repeating.fmt(f),
-        }
-    }
-}
-
 pub struct Reminder {
     pub nr: usize,
-    pub date: DateRepr,
+    pub date: String,
     pub reminder: String,
 }
 
