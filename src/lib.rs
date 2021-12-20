@@ -58,16 +58,12 @@ where
     match cli.cmd {
         Cmd::Config(cmd) => cmd.execute(config)?,
         Cmd::Reminder(cmd) => {
-            let with_reminders = config
-                .reminders
-                .as_ref()
-                .map(|c| c.enabled)
-                .unwrap_or(false);
+            let with_reminders = config.reminders.as_ref().map_or(false, |c| c.enabled);
 
-            if !with_reminders {
-                println!("No reminder configuration set. Please add it first");
-            } else {
+            if with_reminders {
                 cmd.execute(config, clock)?;
+            } else {
+                println!("No reminder configuration set. Please add it first");
             }
         }
         Cmd::New {

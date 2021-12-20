@@ -41,12 +41,13 @@ fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
 
 impl Config {
     pub fn load() -> Result<Self, figment::Error> {
-        let config_path = std::env::var("JOURNAL__CONFIG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
+        let config_path = std::env::var("JOURNAL__CONFIG").map_or_else(
+            |_| {
                 let home = dirs::home_dir().expect("Unable to get the the users 'home' directory");
                 home.join(".journal.yaml")
-            });
+            },
+            PathBuf::from,
+        );
 
         if !config_path.exists() {
             return Err(figment::Error::from(format!("{} does not exist. We need a configuration file to work.\nYou can either use a '.journal.yaml' file in your HOME directory or configure it with the JOURNAL__CONFIG environment variable", config_path.to_string_lossy())));

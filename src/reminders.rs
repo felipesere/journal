@@ -189,7 +189,7 @@ impl Reminders {
             .open(path)
             .context("Opening reminders file to write")?;
 
-        let _ = serde_json::to_writer_pretty(&mut reminders_file, &self).map_err(|e| anyhow!(e))?;
+        serde_json::to_writer_pretty(&mut reminders_file, &self).map_err(|e| anyhow!(e))?;
         tracing::info!("Saved reminders");
         Ok(())
     }

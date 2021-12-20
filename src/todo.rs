@@ -28,38 +28,6 @@ impl FindTodos {
         }
     }
 
-    fn find_todo_section<'a>(&self, parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
-        let mut todo_header = TodoHeader::NotFound;
-
-        for event in parser {
-            let span = tracing::span!(
-                Level::INFO,
-                "looking_for_todo_section",
-                ?event,
-                ?todo_header,
-            );
-            let _entered = span.enter();
-
-            match (&event, &todo_header) {
-                (Event::Start(Tag::Heading(2)), _) => {
-                    todo_header = TodoHeader::Found;
-                }
-                (Event::Text(ref text), TodoHeader::Found) => {
-                    if text.to_string() == "TODOs" {
-                        todo_header = TodoHeader::ProcessedTitle;
-                        tracing::info!("Found a TODO header");
-                    }
-                }
-                (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => return true,
-                _ => {
-                    tracing::trace!("Ignoring event");
-                }
-            }
-        }
-
-        false
-    }
-
     fn gather_open_todos<'a>(
         &mut self,
         parser: &mut impl Iterator<Item = (Event<'a>, Range<usize>)>,
@@ -95,11 +63,11 @@ impl FindTodos {
                 Event::TaskListMarker(done) if found_top_level_item => {
                     tracing::info!("Found a TODO item.");
                     found_top_level_item = false;
-                    if !done {
+                    if done {
+                        tracing::info!("Skipping completed TODO");
+                    } else {
                         tracing::info!("Storing incomplete TODO item");
                         todos.push(range_of_todo_item.take().unwrap());
-                    } else {
-                        tracing::info!("Skipping completed TODO");
                     }
                 }
                 _ => {
@@ -116,7 +84,7 @@ impl FindTodos {
         options.insert(Options::ENABLE_TASKLISTS);
         let mut parser = Parser::new_ext(markdown, options);
 
-        let found = self.find_todo_section(&mut parser);
+        let found = find_todo_section(&mut parser);
 
         let todo_text = Vec::new();
         if !found {
@@ -134,6 +102,38 @@ impl FindTodos {
             .map(|todo| markdown[todo].to_string())
             .collect::<Vec<_>>()
     }
+}
+
+fn find_todo_section<'a>(parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
+    let mut todo_header = TodoHeader::NotFound;
+
+    for event in parser {
+        let span = tracing::span!(
+            Level::INFO,
+            "looking_for_todo_section",
+            ?event,
+            ?todo_header,
+        );
+        let _entered = span.enter();
+
+        match (&event, &todo_header) {
+            (Event::Start(Tag::Heading(2)), _) => {
+                todo_header = TodoHeader::Found;
+            }
+            (Event::Text(ref text), TodoHeader::Found) => {
+                if text.to_string() == "TODOs" {
+                    todo_header = TodoHeader::ProcessedTitle;
+                    tracing::info!("Found a TODO header");
+                }
+            }
+            (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => return true,
+            _ => {
+                tracing::trace!("Ignoring event");
+            }
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]

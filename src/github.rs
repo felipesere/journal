@@ -72,7 +72,7 @@ impl LocalFilter {
     fn apply(&self, pr: &Pr) -> bool {
         let mut applies = true;
         if !self.authors.is_empty() {
-            applies = applies && self.authors.contains(&pr.author)
+            applies = applies && self.authors.contains(&pr.author);
         }
         if !self.labels.is_empty() {
             applies = applies && self.labels.intersection(&pr.labels).count() > 0;
