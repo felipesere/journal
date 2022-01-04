@@ -23,7 +23,7 @@ fn init_logs() {
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     init_logs();
 
