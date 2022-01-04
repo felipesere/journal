@@ -236,7 +236,7 @@ pub struct Pr {
 impl From<&PullRequest> for Pr {
     fn from(raw: &PullRequest) -> Self {
         Pr {
-            author: raw.user.login.clone(),
+            author: raw.user.as_ref().unwrap().login.clone(),
             labels: raw
                 .labels
                 .clone()
@@ -244,9 +244,9 @@ impl From<&PullRequest> for Pr {
                 .iter()
                 .map(|l| l.name.clone())
                 .collect(),
-            repo: raw.base.repo.clone().unwrap().full_name,
-            title: raw.title.clone(),
-            url: raw.html_url.to_string(),
+            repo: raw.base.repo.as_ref().unwrap().full_name.as_ref().unwrap().to_string(),
+            title: raw.title.clone().unwrap(),
+            url: raw.html_url.as_ref().unwrap().to_string(),
         }
     }
 }
