@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use pulldown_cmark::{HeadingLevel::H2, Event, Options, Parser, Tag};
+use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
 use tracing::Level;
 
 #[derive(Debug, Eq, PartialEq)]
