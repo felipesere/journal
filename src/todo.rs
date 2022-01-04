@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use pulldown_cmark::{Event, Options, Parser, Tag};
+use pulldown_cmark::{HeadingLevel::H2, Event, Options, Parser, Tag};
 use tracing::Level;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -41,7 +41,7 @@ impl FindTodos {
             let span = tracing::span!(Level::INFO, "processing_todos", ?event, ?depth);
             let _entered = span.enter();
             match event {
-                Event::Start(Tag::Heading(_)) => {
+                Event::Start(Tag::Heading(_, _, _)) => {
                     // Found a new section, leaving!
                     self.state = State::Done;
                     break;
@@ -117,7 +117,7 @@ fn find_todo_section<'a>(parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
         let _entered = span.enter();
 
         match (&event, &todo_header) {
-            (Event::Start(Tag::Heading(2)), _) => {
+            (Event::Start(Tag::Heading(H2, _, _)), _) => {
                 todo_header = TodoHeader::Found;
             }
             (Event::Text(ref text), TodoHeader::Found) => {
@@ -126,7 +126,7 @@ fn find_todo_section<'a>(parser: &mut impl Iterator<Item = Event<'a>>) -> bool {
                     tracing::info!("Found a TODO header");
                 }
             }
-            (Event::End(Tag::Heading(2)), TodoHeader::ProcessedTitle) => return true,
+            (Event::End(Tag::Heading(H2, _, _)), TodoHeader::ProcessedTitle) => return true,
             _ => {
                 tracing::trace!("Ignoring event");
             }
