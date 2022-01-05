@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use tera::{Context as TeraContext, Tera};
+use serde::Serialize;
+use serde_json::Value;
 use time::{format_description, Date};
+use tinytemplate::TinyTemplate;
 
 use crate::github::Pr;
 
@@ -14,26 +16,41 @@ pub struct Template {
     pub reminders: Option<Vec<String>>,
 }
 
+#[derive(Serialize)]
+pub struct C {
+    title: String,
+    today: String,
+    todos: Vec<String>,
+    prs: Option<Vec<Pr>>,
+    reminders: Option<Vec<String>>,
+}
+
+pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
+    if let Value::String(val) = value {
+        output.push_str(val.trim());
+    }
+    Ok(())
+}
+
 impl Template {
     pub fn render(self) -> Result<String> {
-        let mut tera = Tera::default();
-        tera.add_raw_template("day.md", DAY_TEMPLATE).unwrap();
+        let mut tt = TinyTemplate::new();
+        tt.add_template("day.md", DAY_TEMPLATE)
+            .expect("adding tempalte");
+        tt.add_formatter("trim", trim);
+
         let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
         let today = self.today.format(&year_month_day)?;
 
-        let mut context = TeraContext::new();
-        context.insert("title", &self.title);
-        context.insert("date", &today);
-        context.insert("open_todos", &self.todos);
+        let c = C {
+            title: self.title,
+            todos: self.todos,
+            today,
+            prs: self.prs,
+            reminders: self.reminders,
+        };
 
-        if let Some(ref prs) = self.prs {
-            context.insert("prs", prs);
-        }
-        if let Some(ref reminders) = self.reminders {
-            context.insert("reminders", reminders);
-        }
-
-        tera.render("day.md", &context).map_err(|e| anyhow!(e))
+        tt.render("day.md", &c).map_err(|e| anyhow!(e))
     }
 }
 
@@ -43,6 +60,7 @@ mod tests {
 
     use super::*;
     use indoc::indoc;
+    use pretty_assertions::assert_eq;
     use time::macros::date;
 
     #[test]
@@ -70,6 +88,7 @@ mod tests {
         * [] a todo
 
         * [] another one
+
 
 
 
@@ -115,10 +134,11 @@ mod tests {
 
 
 
-
         ## Pull Requests:
 
         * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
+
+
 
         "#}
         .to_string();
@@ -152,6 +172,7 @@ mod tests {
         * [] a todo
 
         * [] another one
+
 
 
 

@@ -1,27 +1,25 @@
-# {{ title }} on {{ date }}
+# {title} on {today}
 
 ## Notes
 
 > This is where your notes will go!
 
 ## TODOs
+{{ for todo in todos }}
+{ todo | trim}
+{{ endfor }}
 
-{% for todo in open_todos -%}
-{{ todo | trim }}
-
-{% endfor %}
-
-{% if  prs %}
+{{ if prs }}
 ## Pull Requests:
-{% for pr in prs %}
-* [ ] {{pr.title-}} on [{{pr.repo-}}]({{pr.url-}}) by {{ pr.author -}}
-{% endfor %}
-{% endif -%}
+{{ for pr in prs }}
+* [ ] {pr.title-} on [{pr.repo-}]({pr.url-}) by { pr.author -}
+{{ endfor }}
+{{ endif }}
 
-{% if  reminders %}
+{{ if  reminders }}
 ## Your reminders for today:
 
-{% for reminder in reminders -%}
-* [ ] {{ reminder }}
-{% endfor %}
-{% endif %}
+{{ for reminder in reminders -}}
+* [ ] { reminder }
+{{ endfor }}
+{{ endif }}
