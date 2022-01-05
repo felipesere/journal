@@ -6,12 +6,11 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::StructOpt;
-use comfy_table::modifiers::UTF8_ROUND_CORNERS;
-use comfy_table::presets::UTF8_FULL;
-use comfy_table::{ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
+
+use tabled::{Alignment, Column, Modify, Style, Table, Tabled};
 
 use crate::Config;
 
@@ -91,22 +90,10 @@ impl ReminderCmd {
             ReminderCmd::List => {
                 tracing::info!("intention to list reminders");
 
-                let reminders = reminders_storage.all();
-
-                let mut table = Table::new();
-                table
-                    .load_preset(UTF8_FULL)
-                    .apply_modifier(UTF8_ROUND_CORNERS)
-                    .set_content_arrangement(ContentArrangement::Dynamic)
-                    .set_header(vec!["Nr", "Date", "Reminders"]);
-
-                for reminder in reminders {
-                    table.add_row(vec![
-                        reminder.nr.to_string(),
-                        reminder.date.to_string(),
-                        reminder.reminder,
-                    ]);
-                }
+                let data = reminders_storage.all();
+                let table = Table::new(&data)
+                    .with(Style::PSEUDO)
+                    .with(Modify::new(Column(..)).with(Alignment::left()));
 
                 println!("{}", table);
             }
@@ -287,6 +274,7 @@ impl Reminders {
     }
 }
 
+#[derive(Tabled)]
 pub struct Reminder {
     pub nr: usize,
     pub date: String,
