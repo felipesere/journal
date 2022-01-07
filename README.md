@@ -1,10 +1,16 @@
 ![example workflow](https://github.com/felipesere/journal/actions/workflows/action.yml/badge.svg)
 [![codecov](https://codecov.io/gh/felipesere/journal/branch/main/graph/badge.svg?token=Z6YMTZ77FR)](https://codecov.io/gh/felipesere/journal)
 
-# `journal` in Rust
+# `journal`
 
-Journal is a simple tool to keep track of TODOs & notes in simple Markdown files.
-It also supports Github PRs and Reminders.
+Journal is a small tool to keep track of TODOs, notes, and reminders in simple Markdown files.
+It can also get a list of open PullRequests from Github.
+
+One of `journal`s core tennets is to keep all data local. It only fetches data from remote sources (GitHub, if enabled) but will never store it outside of the computer it is running on. This keeps the tool simple, privacy aware, and capable of running offline. It also gives you the freedom to use your own tools for editing files and searching across them.
+
+
+
+![Screenshot of a Journal entry open in Typora](assets/journal-overview.png)
 
 ## Configuration
 
@@ -103,23 +109,22 @@ journal reminders new --every 3.days "Check in with team Apollo about X"
 You can also manipulate the reminders by listing and deleting them:
 
 ```sh
-journal reminders new --every 3.days "Check in with team Apollo"
+$ journal reminders new --every 3.days "Check in with team Apollo"
 Added a reminder for 'Check in with team Apollo' every '3 Days'
 
+$ journal reminders list
+┌────┬──────────────┬───────────────────────────────────┐
+│ nr │ date         │ reminder                          │
+├────┼──────────────┼───────────────────────────────────┤
+│ 1  │ every 3 Days │ Check in with team Apollo about X │
+└────┴──────────────┴───────────────────────────────────┘
 
-journal reminders list
-╭────┬──────────────┬───────────────────────────╮
-│ Nr ┆ Date         ┆ Reminders                 │
-╞════╪══════════════╪═══════════════════════════╡
-│ 1  ┆ every 3 Days ┆ Check in with team Apollo │
-╰────┴──────────────┴───────────────────────────╯
 
 journal reminders delete 1
-Deleted 5
+Deleted 1
 
-journal reminders list
-╭────┬──────────────┬───────────────────────────╮
-│ Nr ┆ Date         ┆ Reminders                 │
-╞════╪══════════════╪═══════════════════════════╡
-╰────┴──────────────┴───────────────────────────╯
+$ journal reminders list
+┌────┌──────┬──────────┐
+│ nr │ date │ reminder │
+└────┴──────┴──────────┘
 ```
