@@ -5,6 +5,7 @@ use time::{format_description, Date};
 use tinytemplate::TinyTemplate;
 
 use crate::github::Pr;
+use crate::jira::Task;
 
 pub const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
@@ -14,8 +15,10 @@ pub struct Template {
     pub todos: Vec<String>,
     pub prs: Option<Vec<Pr>>,
     pub reminders: Option<Vec<String>>,
+    pub tasks: Option<Vec<Task>>,
 }
 
+// TODO: replace this with a simple map
 #[derive(Serialize)]
 pub struct C {
     title: String,
@@ -23,6 +26,7 @@ pub struct C {
     todos: Vec<String>,
     prs: Option<Vec<Pr>>,
     reminders: Option<Vec<String>>,
+    tasks: Option<Vec<Task>>,
 }
 
 pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
@@ -48,6 +52,7 @@ impl Template {
             today,
             prs: self.prs,
             reminders: self.reminders,
+            tasks: self.tasks,
         };
 
         tt.render("day.md", &c).map_err(|e| anyhow!(e))
@@ -74,6 +79,7 @@ mod tests {
             ],
             prs: None,
             reminders: None,
+            tasks: None,
         };
 
         let expected = indoc! {r#"
@@ -117,6 +123,7 @@ mod tests {
                 url: "https://github.com/felipesere/journal".into(),
             }]),
             reminders: None,
+            tasks: None,
         };
 
         let expected = indoc! {r#"
@@ -158,6 +165,7 @@ mod tests {
             ],
             prs: None,
             reminders: Some(vec!["Buy milk".to_string(), "Send email".to_string()]),
+            tasks: None,
         };
 
         let expected = indoc! {r#"

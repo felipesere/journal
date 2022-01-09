@@ -8,8 +8,8 @@ use figment::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::github::PullRequestConfig;
 use crate::reminders::ReminderConfig;
+use crate::{github::PullRequestConfig, jira::JiraConfig};
 
 #[derive(Debug, StructOpt)]
 pub enum ConfigCmd {
@@ -33,6 +33,7 @@ pub struct Config {
     pub dir: PathBuf,
     pub pull_requests: Option<PullRequestConfig>,
     pub reminders: Option<ReminderConfig>,
+    pub jira: Option<JiraConfig>,
 }
 
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {

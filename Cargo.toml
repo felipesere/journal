@@ -25,6 +25,8 @@ time = { version = "0.3.5", features = ["formatting", "macros", "parsing", "serd
 tinytemplate = "1.2.1"
 tracing = { version = "0.1", features = ["log", "attributes"] }
 tracing-subscriber = "0.3.5"
+reqwest = { version = "0.11.8", features =["serde_json"] }
+jsonpath = "0.1.1"
 
 [dev-dependencies]
 assert_fs = "1.0"
@@ -34,3 +36,4 @@ indoc = "1.0"
 predicates = "2.1"
 pretty_assertions = "1.0.0"
 tracing-test = "0.2.1"
+maplit = "1.0.2"

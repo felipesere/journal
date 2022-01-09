@@ -12,6 +12,7 @@ pub use config::Config;
 
 mod config;
 mod github;
+mod jira;
 mod reminders;
 mod storage;
 mod template;
@@ -85,6 +86,12 @@ where
             } else {
                 None
             };
+            let tasks = if let Some(ref config) = config.jira {
+                let tasks = config.get_matching_tasks().await?;
+                Some(tasks)
+            } else {
+                None
+            };
 
             let reminders = if let Some(ReminderConfig { enabled: true }) = config.reminders {
                 let location = config.dir.join("reminders.json");
@@ -103,6 +110,7 @@ where
                 todos,
                 prs,
                 reminders,
+                tasks,
             };
 
             let out = template.render()?;
@@ -145,6 +153,7 @@ mod test {
             dir: journal_home.to_path_buf(),
             pull_requests: None,
             reminders: None,
+            jira: None,
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {
