@@ -4,18 +4,15 @@ use serde_json::Value;
 use time::{format_description, Date};
 use tinytemplate::TinyTemplate;
 
-use crate::github::Pr;
-use crate::jira::Task;
-
 pub const DAY_TEMPLATE: &str = include_str!("../template/day.md");
 
 pub struct Template {
     pub title: String,
     pub today: Date,
-    pub todos: Vec<String>,
-    pub prs: Option<Vec<Pr>>,
-    pub reminders: Option<Vec<String>>,
-    pub tasks: Option<Vec<Task>>,
+    pub todos: Option<String>,
+    pub prs: Option<String>,
+    pub reminders: Option<String>,
+    pub tasks: Option<String>,
 }
 
 // TODO: replace this with a simple map
@@ -23,10 +20,10 @@ pub struct Template {
 pub struct C {
     title: String,
     today: String,
-    todos: Vec<String>,
-    prs: Option<Vec<Pr>>,
-    reminders: Option<Vec<String>>,
-    tasks: Option<Vec<Task>>,
+    todos: Option<String>,
+    prs: Option<String>,
+    reminders: Option<String>,
+    tasks: Option<String>,
 }
 
 pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
@@ -61,8 +58,6 @@ impl Template {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -73,16 +68,21 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
+            todos: Some(
+                indoc::indoc! {r"
+                ## TODOs
+
+                * [] a todo
+                * [] another one
+                "}
+                .to_string(),
+            ),
             prs: None,
             reminders: None,
             tasks: None,
         };
 
-        let expected = indoc! {r#"
+        let expected = indoc! {r"
         # Some title on 2021-12-24
 
         ## Notes
@@ -92,14 +92,8 @@ mod tests {
         ## TODOs
 
         * [] a todo
-
         * [] another one
-
-
-
-
-
-        "#}
+        "}
         .to_string();
 
         assert_eq!(expected, template.render()?);
@@ -111,17 +105,20 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
-            prs: Some(vec![Pr {
-                author: "felipe".into(),
-                labels: HashSet::new(),
-                repo: "felipesere/journal".to_string(),
-                title: "Fix the thing".to_string(),
-                url: "https://github.com/felipesere/journal".into(),
-            }]),
+            todos: Some(indoc::indoc! {r"
+                ## TODOs
+
+                * [ ] a todo
+                * [ ] another one
+
+                "}.to_string(),
+            ),
+            prs: Some(indoc::indoc! {r"
+                ## Pull Requests
+
+                * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
+                "}.to_string(),
+            ),
             reminders: None,
             tasks: None,
         };
@@ -135,18 +132,12 @@ mod tests {
 
         ## TODOs
 
-        * [] a todo
+        * [ ] a todo
+        * [ ] another one
 
-        * [] another one
-
-
-
-        ## Pull Requests:
+        ## Pull Requests
 
         * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
-
-
-
         "#}
         .to_string();
 
@@ -159,12 +150,26 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
+            todos: Some(
+                indoc::indoc! {r"
+                ## TODOs
+
+                * [ ] a todo
+                * [ ] another one
+
+                "}
+                .to_string(),
+            ),
             prs: None,
-            reminders: Some(vec!["Buy milk".to_string(), "Send email".to_string()]),
+            reminders: Some(
+                indoc::indoc! {r"
+                ## Your reminders for today:
+
+                * [ ] Buy milk
+                * [ ] Send email
+            "}
+                .to_string(),
+            ),
             tasks: None,
         };
 
@@ -177,20 +182,13 @@ mod tests {
 
         ## TODOs
 
-        * [] a todo
-
-        * [] another one
-
-
-
-
+        * [ ] a todo
+        * [ ] another one
 
         ## Your reminders for today:
 
         * [ ] Buy milk
         * [ ] Send email
-
-
         "#}
         .to_string();
 

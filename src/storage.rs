@@ -53,6 +53,10 @@ impl Journal {
         std::fs::write(&path, data)?;
         Ok(path)
     }
+
+    pub(crate) fn child_file(&self, child: &str) -> PathBuf {
+        self.location.join(child)
+    }
 }
 
 #[cfg(test)]

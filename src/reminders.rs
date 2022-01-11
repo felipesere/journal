@@ -11,7 +11,9 @@ use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
 use tabled::{Alignment, Column, Modify, Style, Table, Tabled};
+use tinytemplate::TinyTemplate;
 
+use crate::storage::Journal;
 use crate::Config;
 
 const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
@@ -46,9 +48,45 @@ impl Clock for WallClock {
     }
 }
 
+const REMIDNERS: &str = r#"
+## Your reminders for today:
+{{ for reminder in reminders }}
+* [ ] { reminder }
+{{ endfor }}
+
+"#;
+
 #[derive(Deserialize, Serialize)]
 pub struct ReminderConfig {
     pub enabled: bool,
+}
+
+impl ReminderConfig {
+    pub async fn render(&self, journal: &Journal, clock: &impl Clock) -> Result<String> {
+        if !self.enabled {
+            Ok("".to_string())
+        } else {
+            let location = journal.child_file("reminders.json");
+            let reminders = Reminders::load(&location)?;
+
+            let todays_reminders = reminders.for_today(clock);
+
+            #[derive(Serialize)]
+            struct C {
+                reminders: Vec<String>,
+            }
+
+            let mut tt = TinyTemplate::new();
+            tt.add_template("reminders", REMIDNERS)?;
+            tt.render(
+                "reminders",
+                &C {
+                    reminders: todays_reminders,
+                },
+            )
+            .map_err(|e| anyhow::anyhow!(e))
+        }
+    }
 }
 
 #[derive(Debug, StructOpt)]

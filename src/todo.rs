@@ -1,7 +1,55 @@
 use std::ops::Range;
 
+use anyhow::Result;
 use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tinytemplate::TinyTemplate;
 use tracing::Level;
+
+use crate::storage::Journal;
+
+const TODO: &str = indoc::indoc! {r#"
+## TODOs
+{{ for todo in todos }}
+{ todo | trim }
+{{ endfor }}
+
+"#};
+
+pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
+    if let Value::String(val) = value {
+        output.push_str(val.trim());
+    }
+    Ok(())
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct TodoConfig;
+
+impl TodoConfig {
+    pub async fn render(&self, journal: &Journal) -> Result<String> {
+        let todos = match journal.latest_entry() {
+            Ok(None) => Vec::new(),
+            Ok(Some(last_entry)) => {
+                let mut finder = FindTodos::new();
+                finder.process(&last_entry.markdown)
+            }
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        #[derive(Serialize)]
+        struct C {
+            todos: Vec<String>,
+        }
+
+        let mut tt = TinyTemplate::new();
+        tt.add_template("todos", TODO)?;
+        tt.add_formatter("trim", trim);
+        tt.render("todos", &C { todos })
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 enum State {

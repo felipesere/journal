@@ -8,6 +8,7 @@ use octocrab::{
     Octocrab, OctocrabBuilder, Page,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tinytemplate::TinyTemplate;
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
@@ -19,7 +20,28 @@ pub struct PullRequestConfig {
     enabled: bool,
 }
 
+const PRS: &str = r#"
+## Pull Requests:
+{{ for pr in prs }}
+* [ ] {pr.title-} on [{pr.repo-}]({pr.url-}) by { pr.author -}
+{{ endfor }}
+
+"#;
+
 impl PullRequestConfig {
+    pub async fn render(&self) -> Result<String> {
+        let prs = self.get_matching_prs().await?;
+
+        #[derive(Serialize)]
+        struct C {
+            prs: Vec<Pr>,
+        }
+
+        let mut tt = TinyTemplate::new();
+        tt.add_template("prs", PRS)?;
+        tt.render("prs", &C { prs }).map_err(|e| anyhow::anyhow!(e))
+    }
+
     pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
         if !self.enabled {
             return Ok(Vec::new());

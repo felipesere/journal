@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::collections::HashMap;
+use tinytemplate::TinyTemplate;
 
 use jsonpath::Selector;
 use serde::{Deserialize, Serialize};
@@ -54,7 +55,29 @@ impl Selection {
     }
 }
 
+const TASKS: &str = r#"
+## Open tasks
+{{ for task in tasks }}
+* [ ] {task.summary-} [here]({task.href-})
+{{ endfor }}
+
+"#;
+
 impl JiraConfig {
+    pub async fn render(&self) -> Result<String> {
+        let tasks = self.get_matching_tasks().await?;
+
+        #[derive(Serialize)]
+        struct C {
+            tasks: Vec<Task>,
+        }
+
+        let mut tt = TinyTemplate::new();
+        tt.add_template("tasks", TASKS)?;
+        tt.render("tasks", &C { tasks })
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+
     pub async fn get_matching_tasks(&self) -> Result<Vec<Task>> {
         let params = [
             ("jql", self.query.to_query()),

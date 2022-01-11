@@ -71,33 +71,22 @@ where
             title,
             write_to_stdout,
         } => {
-            let todos = match journal.latest_entry() {
-                Ok(Some(latest_entry)) => {
-                    let mut finder = todo::FindTodos::new();
-                    finder.process(&latest_entry.markdown)
-                }
-                Ok(None) => Vec::new(),
-                Err(e) => return Err(anyhow::anyhow!(e)),
-            };
+            let todos = Some(config.todo.render(&journal).await?);
 
             let prs = if let Some(ref config) = config.pull_requests {
-                let prs = config.get_matching_prs().await?;
-                Some(prs)
+                Some(config.render().await?)
             } else {
                 None
             };
+
             let tasks = if let Some(ref config) = config.jira {
-                let tasks = config.get_matching_tasks().await?;
-                Some(tasks)
+                Some(config.render().await?)
             } else {
                 None
             };
 
-            let reminders = if let Some(ReminderConfig { enabled: true }) = config.reminders {
-                let location = config.dir.join("reminders.json");
-                let reminders = Reminders::load(&location)?;
-
-                Some(reminders.for_today(clock))
+            let reminders = if let Some(ref config) = config.reminders {
+                Some(config.render(&journal, clock).await?)
             } else {
                 None
             };
@@ -139,6 +128,8 @@ mod controlled_clock;
 mod test {
     use std::sync::{Arc, Mutex};
 
+    use crate::todo::TodoConfig;
+
     use super::controlled_clock::ControlledClock;
     use super::*;
     use assert_fs::{prelude::*, TempDir};
@@ -154,6 +145,7 @@ mod test {
             pull_requests: None,
             reminders: None,
             jira: None,
+            todo: TodoConfig::default(),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {
@@ -184,10 +176,6 @@ mod test {
                 > This is where your notes will go!
 
                 ## TODOs
-
-
-
-
 
                 "#}));
         Ok(())
