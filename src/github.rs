@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use futures::future::join_all;
 use octocrab::{
-    models::{pulls::PullRequest, Repository},
+    models::pulls::PullRequest,
     Octocrab, OctocrabBuilder, Page,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -62,8 +62,7 @@ impl PullRequestConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PrSelector {
-    #[serde(flatten)]
-    origin: Origin,
+    repo: Repo,
     #[serde(flatten)]
     filter: LocalFilter,
 }
@@ -83,27 +82,24 @@ impl LocalFilter {
 impl PrSelector {
     #[instrument(skip(octocrab))]
     pub async fn get_prs(&self, octocrab: &Octocrab) -> Result<Vec<Pr>> {
-        let repos = self.origin.repos(octocrab).await?;
+        let Repo { owner, name } = self.repo.clone();
 
-        let mut prs = Vec::new();
-        for Repo { owner, name } in repos {
-            tracing::info!("Getting PRs for org={} repo={}", owner, name);
-            let mut current_page = octocrab
-                .pulls(&owner, &name)
-                .list()
-                .state(octocrab::params::State::Open)
-                .per_page(50)
-                .send()
-                .await?;
+        tracing::info!("Getting PRs for org={} repo={}", owner, name);
+        let mut current_page = octocrab
+            .pulls(&owner, &name)
+            .list()
+            .state(octocrab::params::State::Open)
+            .per_page(50)
+            .send()
+            .await?;
 
-            prs.extend(self.extract_prs(&mut current_page));
+        let mut prs = self.extract_prs(&mut current_page);
 
-            while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
-                tracing::info!("Getting next page of PRs for org={} repo={}", owner, name);
-                prs.extend(self.extract_prs(&mut next_page));
+        while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
+            tracing::info!("Getting next page of PRs for org={} repo={}", owner, name);
+            prs.extend(self.extract_prs(&mut next_page));
 
-                current_page = next_page;
-            }
+            current_page = next_page;
         }
 
         Ok(prs)
@@ -117,14 +113,6 @@ impl PrSelector {
             .filter(|pr| self.filter.apply(pr))
             .collect::<Vec<_>>()
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-enum Origin {
-    #[serde(rename = "org")]
-    Organisation(String),
-    #[serde(rename = "repo")]
-    Repository(Repo),
 }
 
 #[derive(Debug, Clone)]
@@ -164,39 +152,6 @@ impl<'de> Deserialize<'de> for Repo {
         let s = String::deserialize(deserializer)?;
         FromStr::from_str(&s).map_err(serde::de::Error::custom)
     }
-}
-
-impl Origin {
-    #[instrument(skip(octocrab))]
-    async fn repos(&self, octocrab: &Octocrab) -> Result<Vec<Repo>> {
-        match self {
-            Origin::Organisation(org) => {
-                tracing::info!("Getting repos for org={}", org);
-                let mut current_page = octocrab.orgs(org).list_repos().per_page(50).send().await?;
-                let mut repos: Vec<Repo> = extract_repo(org, &mut current_page);
-
-                while let Ok(Some(mut next_page)) = octocrab.get_page(&current_page.next).await {
-                    tracing::info!("Getting next page of repos for org={}", org);
-                    repos.extend(extract_repo(org, &mut next_page));
-
-                    current_page = next_page;
-                }
-
-                Ok(repos)
-            }
-            Origin::Repository(repo) => Ok(vec![repo.clone()]),
-        }
-    }
-}
-
-fn extract_repo(org: &str, page: &mut Page<Repository>) -> Vec<Repo> {
-    page.take_items()
-        .iter()
-        .map(|repo: &Repository| Repo {
-            owner: org.to_string(),
-            name: repo.name.clone(),
-        })
-        .collect()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

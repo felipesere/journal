@@ -11,13 +11,15 @@
 
 {{ if prs }}
 ## Pull Requests:
-{{ for pr in prs }}
+
+{{ for pr in prs -}}
 * [ ] {pr.title-} on [{pr.repo-}]({pr.url-}) by { pr.author -}
 {{ endfor }}
 {{ endif }}
 {{ if tasks }}
 ## Open tasks
-{{ for task in tasks }}
+
+{{ for task in tasks -}}
 * [ ] {task.summary-} [here]({task.href-})
 {{ endfor }}
 
