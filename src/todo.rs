@@ -1,31 +1,25 @@
 use std::ops::Range;
 
 use anyhow::Result;
+use handlebars::Handlebars;
 use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tinytemplate::TinyTemplate;
 use tracing::Level;
 
 use crate::storage::Journal;
 
 const TODO: &str = indoc::indoc! {r#"
 ## TODOs
-{{ for todo in todos }}
-{ todo | trim }
-{{ endfor }}
+{{#each todos }}
+{{~this~}}
+{{/each}}
 
 "#};
 
-pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
-    if let Value::String(val) = value {
-        output.push_str(val.trim());
-    }
-    Ok(())
-}
-
 #[derive(Default, Debug, Deserialize, Serialize)]
-pub struct TodoConfig;
+pub struct TodoConfig {
+    template: Option<String>,
+}
 
 impl TodoConfig {
     pub async fn render(&self, journal: &Journal) -> Result<String> {
@@ -43,9 +37,11 @@ impl TodoConfig {
             todos: Vec<String>,
         }
 
-        let mut tt = TinyTemplate::new();
-        tt.add_template("todos", TODO)?;
-        tt.add_formatter("trim", trim);
+        let template = self.template.clone().unwrap_or_else(|| TODO.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("todos", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
         tt.render("todos", &C { todos })
             .map_err(|e| anyhow::anyhow!(e))
     }

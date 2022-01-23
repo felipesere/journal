@@ -3,12 +3,12 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use futures::future::join_all;
+use handlebars::Handlebars;
 use octocrab::{
     models::{pulls::PullRequest, Repository},
     Octocrab, OctocrabBuilder, Page,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tinytemplate::TinyTemplate;
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
@@ -17,14 +17,15 @@ use tracing::{instrument, Instrument};
 pub struct PullRequestConfig {
     pub(crate) auth: Auth,
     select: Vec<PrSelector>,
+    template: Option<String>,
     enabled: bool,
 }
 
 const PRS: &str = r#"
 ## Pull Requests:
-{{ for pr in prs }}
-* [ ] {pr.title-} on [{pr.repo-}]({pr.url-}) by { pr.author -}
-{{ endfor }}
+{{# prs }}
+* [ ] {{~title~}} on [{{~repo~}}]({{~url~}}) by {{~author~}}
+{{/prs }}
 
 "#;
 
@@ -37,8 +38,11 @@ impl PullRequestConfig {
             prs: Vec<Pr>,
         }
 
-        let mut tt = TinyTemplate::new();
-        tt.add_template("prs", PRS)?;
+        let template = self.template.clone().unwrap_or_else(|| PRS.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("prs", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
         tt.render("prs", &C { prs }).map_err(|e| anyhow::anyhow!(e))
     }
 

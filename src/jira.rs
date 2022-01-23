@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
-use tinytemplate::TinyTemplate;
 
+use handlebars::Handlebars;
 use jsonpath::Selector;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,6 +33,7 @@ pub struct JiraConfig {
     base_url: String,
     auth: JiraAuth,
     query: Jql,
+    template: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,9 +58,9 @@ impl Selection {
 
 const TASKS: &str = r#"
 ## Open tasks
-{{ for task in tasks }}
-* [ ] {task.summary-} [here]({task.href-})
-{{ endfor }}
+{{# tasks }}
+* [ ] {{summary}} [here]({{task.href}})
+{{/tasks }}
 
 "#;
 
@@ -72,10 +73,12 @@ impl JiraConfig {
             tasks: Vec<Task>,
         }
 
-        let mut tt = TinyTemplate::new();
-        tt.add_template("tasks", TASKS)?;
-        tt.render("tasks", &C { tasks })
-            .map_err(|e| anyhow::anyhow!(e))
+        let template = self.template.clone().unwrap_or_else(|| TASKS.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("tasks", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render("tasks", &C { tasks }).map_err(|e| e.into())
     }
 
     pub async fn get_matching_tasks(&self) -> Result<Vec<Task>> {

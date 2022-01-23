@@ -1,9 +1,10 @@
 use anyhow::Result;
 use clap::{AppSettings, StructOpt};
 
+use std::collections::HashMap;
 use std::path::Path;
 
-use config::ConfigCmd;
+use config::{ConfigCmd, Sections};
 pub use reminders::{Clock, ReminderCmd, ReminderConfig, Reminders, WallClock};
 use storage::Journal;
 use template::Template;
@@ -71,24 +72,36 @@ where
             title,
             write_to_stdout,
         } => {
+            let mut sections = HashMap::new();
+
+            sections.insert(
+                Sections::Notes,
+                indoc::indoc! {r#"
+                                                             ## Notes
+
+                                                             > This is where your notes will go!
+                                                             "#}
+                .to_string(),
+            );
+
             let todos = Some(config.todo.render(&journal).await?);
+            if let Some(todos) = todos {
+                sections.insert(Sections::Todos, todos);
+            }
 
-            let prs = if let Some(ref config) = config.pull_requests {
-                Some(config.render().await?)
-            } else {
-                None
+            if let Some(ref config) = config.pull_requests {
+                let prs = config.render().await?;
+                sections.insert(Sections::Prs, prs);
             };
 
-            let tasks = if let Some(ref config) = config.jira {
-                Some(config.render().await?)
-            } else {
-                None
+            if let Some(ref config) = config.jira {
+                let tasks = config.render().await?;
+                sections.insert(Sections::Tasks, tasks);
             };
 
-            let reminders = if let Some(ref config) = config.reminders {
-                Some(config.render(&journal, clock).await?)
-            } else {
-                None
+            if let Some(ref config) = config.reminders {
+                let reminders = config.render(&journal, clock).await?;
+                sections.insert(Sections::Reminders, reminders);
             };
 
             let today = clock.today();
@@ -96,13 +109,10 @@ where
             let template = Template {
                 title: title.clone(),
                 today,
-                todos,
-                prs,
-                reminders,
-                tasks,
+                sections,
             };
 
-            let out = template.render()?;
+            let out = template.render(config.sections.clone())?;
 
             if write_to_stdout {
                 print!("{}", out);
@@ -137,6 +147,7 @@ mod test {
     use time::ext::NumericalDuration;
     use time::Month::April;
 
+    #[ignore]
     #[tokio::test]
     async fn creats_various_entries_on_the_filesystem() -> Result<()> {
         let journal_home = TempDir::new()?;
@@ -146,6 +157,7 @@ mod test {
             reminders: None,
             jira: None,
             todo: TodoConfig::default(),
+            sections: Vec::new(),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {
@@ -172,6 +184,7 @@ mod test {
                 # The Next One on 2020-04-23
 
                 ## Notes
+
 
                 > This is where your notes will go!
 

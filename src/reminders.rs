@@ -10,11 +10,10 @@ use serde::{Deserialize, Serialize};
 use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
+use handlebars::Handlebars;
 use tabled::{Alignment, Column, Modify, Style, Table, Tabled};
-use tinytemplate::TinyTemplate;
 
-use crate::storage::Journal;
-use crate::Config;
+use crate::{storage::Journal, Config};
 
 const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
 
@@ -50,15 +49,16 @@ impl Clock for WallClock {
 
 const REMIDNERS: &str = r#"
 ## Your reminders for today:
-{{ for reminder in reminders }}
-* [ ] { reminder }
-{{ endfor }}
+{{#each reminders }}
+* [ ] {{ this }}
+{{/each }}
 
 "#;
 
 #[derive(Deserialize, Serialize)]
 pub struct ReminderConfig {
     pub enabled: bool,
+    pub template: Option<String>,
 }
 
 impl ReminderConfig {
@@ -76,15 +76,21 @@ impl ReminderConfig {
                 reminders: Vec<String>,
             }
 
-            let mut tt = TinyTemplate::new();
-            tt.add_template("reminders", REMIDNERS)?;
+            let template = self
+                .template
+                .clone()
+                .unwrap_or_else(|| REMIDNERS.to_string());
+
+            let mut tt = Handlebars::new();
+            tt.register_template_string("reminders", template)?;
+            tt.register_escape_fn(handlebars::no_escape);
             tt.render(
                 "reminders",
                 &C {
                     reminders: todays_reminders,
                 },
             )
-            .map_err(|e| anyhow::anyhow!(e))
+            .map_err(|e| e.into())
         }
     }
 }

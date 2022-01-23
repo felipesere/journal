@@ -1,59 +1,51 @@
-use anyhow::{anyhow, Result};
-use serde::Serialize;
-use serde_json::Value;
-use time::{format_description, Date};
-use tinytemplate::TinyTemplate;
+use std::collections::HashMap;
 
-pub const DAY_TEMPLATE: &str = include_str!("../template/day.md");
+use anyhow::Result;
+use time::{format_description, Date};
+
+use crate::config::{default_order, Sections};
 
 pub struct Template {
     pub title: String,
     pub today: Date,
-    pub todos: Option<String>,
-    pub prs: Option<String>,
-    pub reminders: Option<String>,
-    pub tasks: Option<String>,
-}
-
-// TODO: replace this with a simple map
-#[derive(Serialize)]
-pub struct C {
-    title: String,
-    today: String,
-    todos: Option<String>,
-    prs: Option<String>,
-    reminders: Option<String>,
-    tasks: Option<String>,
-}
-
-pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
-    if let Value::String(val) = value {
-        output.push_str(val.trim());
-    }
-    Ok(())
+    pub sections: HashMap<Sections, String>,
 }
 
 impl Template {
-    pub fn render(self) -> Result<String> {
-        let mut tt = TinyTemplate::new();
-        tt.add_template("day.md", DAY_TEMPLATE)
-            .expect("adding tempalte");
-        tt.add_formatter("trim", trim);
-
+    pub fn render(self, order: Vec<Sections>) -> Result<String> {
         let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
-        let today = self.today.format(&year_month_day)?;
 
-        let c = C {
-            title: self.title,
-            todos: self.todos,
+        let Template {
+            title,
             today,
-            prs: self.prs,
-            reminders: self.reminders,
-            tasks: self.tasks,
-        };
+            sections,
+        } = self;
 
-        tt.render("day.md", &c).map_err(|e| anyhow!(e))
+        let today = today.format(&year_month_day)?;
+
+        let order = expand_with_defaults(order);
+
+        let mut to_be_printed = vec![format!("# {title} on {today}")];
+
+        for section in &order {
+            if let Some(content) = sections.get(section) {
+                to_be_printed.push(content.to_string());
+            };
+        }
+
+        Ok(to_be_printed.join("\n\n"))
     }
+}
+
+fn expand_with_defaults(mut order: Vec<Sections>) -> Vec<Sections> {
+    let mut df = default_order();
+
+    for section in &order {
+        df = df.into_iter().filter(|s| s != section).collect();
+    }
+
+    order.extend(df);
+    order
 }
 
 #[cfg(test)]
@@ -68,18 +60,19 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: Some(
-                indoc::indoc! {r"
+            sections: maplit::hashmap! {
+                Sections::Todos => indoc! {r"
                 ## TODOs
 
                 * [] a todo
                 * [] another one
-                "}
-                .to_string(),
-            ),
-            prs: None,
-            reminders: None,
-            tasks: None,
+                "}.to_string(),
+                Sections::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+            },
         };
 
         let expected = indoc! {r"
@@ -89,6 +82,7 @@ mod tests {
 
         > This is where your notes will go!
 
+
         ## TODOs
 
         * [] a todo
@@ -96,7 +90,10 @@ mod tests {
         "}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![Sections::Notes, Sections::Todos, Sections::Prs])?
+        );
         Ok(())
     }
 
@@ -105,22 +102,24 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: Some(indoc::indoc! {r"
+            sections: maplit::hashmap! {
+                Sections::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+                Sections::Todos => indoc::indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
-
                 "}.to_string(),
-            ),
-            prs: Some(indoc::indoc! {r"
+                Sections::Prs => indoc::indoc! {r"
                 ## Pull Requests
 
                 * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
                 "}.to_string(),
-            ),
-            reminders: None,
-            tasks: None,
+            },
         };
 
         let expected = indoc! {r#"
@@ -130,10 +129,12 @@ mod tests {
 
         > This is where your notes will go!
 
+
         ## TODOs
 
         * [ ] a todo
         * [ ] another one
+
 
         ## Pull Requests
 
@@ -141,7 +142,10 @@ mod tests {
         "#}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![Sections::Notes, Sections::Todos, Sections::Prs])?
+        );
         Ok(())
     }
 
@@ -150,27 +154,25 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: Some(
-                indoc::indoc! {r"
+            sections: maplit::hashmap! {
+                Sections::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+                Sections::Todos => indoc::indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
-
-                "}
-                .to_string(),
-            ),
-            prs: None,
-            reminders: Some(
-                indoc::indoc! {r"
+                "}.to_string(),
+                Sections::Reminders => indoc::indoc! {r"
                 ## Your reminders for today:
 
                 * [ ] Buy milk
                 * [ ] Send email
-            "}
-                .to_string(),
-            ),
-            tasks: None,
+                "}.to_string(),
+            },
         };
 
         let expected = indoc! {r#"
@@ -180,10 +182,12 @@ mod tests {
 
         > This is where your notes will go!
 
+
         ## TODOs
 
         * [ ] a todo
         * [ ] another one
+
 
         ## Your reminders for today:
 
@@ -192,7 +196,10 @@ mod tests {
         "#}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![Sections::Notes, Sections::Todos, Sections::Reminders])?
+        );
         Ok(())
     }
 }

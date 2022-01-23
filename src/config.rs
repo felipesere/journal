@@ -37,6 +37,27 @@ pub struct Config {
     pub jira: Option<JiraConfig>,
     #[serde(default)]
     pub todo: TodoConfig,
+    #[serde(default = "default_order")]
+    pub sections: Vec<Sections>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
+pub enum Sections {
+    #[serde(rename = "notes")]
+    Notes,
+    #[serde(rename = "todos")]
+    Todos,
+    #[serde(rename = "pull_requests")]
+    Prs,
+    #[serde(rename = "jira")]
+    Tasks,
+    #[serde(rename = "reminders")]
+    Reminders,
+}
+
+pub fn default_order() -> Vec<Sections> {
+    use Sections::*;
+    vec![Notes, Todos, Prs, Tasks, Reminders]
 }
 
 fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
@@ -69,7 +90,6 @@ impl Config {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::github::Auth;
     use crate::Config;
 
     #[test]
@@ -100,37 +120,6 @@ mod tests {
             assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
             assert!(config.pull_requests.is_some());
             assert!(config.reminders.is_some());
-
-            Ok(())
-        });
-    }
-
-    #[ignore]
-    #[test]
-    fn config_read_from_env() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
-
-            jail.create_file(".journal.yml", r#"dir: file/from/yaml"#)?;
-            jail.set_env("JOURNAL__DIR", "env/set/the/dir");
-            jail.set_env(
-                "JOURNAL_PULL_REQUESTS__AUTH_PERSONAL_ACCESS_TOKEN",
-                "my-access-token",
-            );
-
-            jail.set_env("JOURNAL_PULL_REQUESTS__ENABLED", "true");
-
-            let config = Config::load()?;
-
-            assert_eq!(config.dir, PathBuf::from("env/set/the/dir"));
-
-            assert!(config.pull_requests.is_some());
-            let pull_requests = config.pull_requests.unwrap();
-            assert_eq!(
-                pull_requests.auth,
-                Auth::PersonalAccessToken("my-access-token".into())
-            );
 
             Ok(())
         });
