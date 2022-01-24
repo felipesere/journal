@@ -29,7 +29,7 @@ impl Jql {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct JiraConfig {
-    enabled: bool,
+    pub enabled: bool,
     base_url: String,
     auth: JiraAuth,
     query: Jql,

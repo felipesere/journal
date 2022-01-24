@@ -15,10 +15,10 @@ use tracing::{instrument, Instrument};
 /// Configuration for how journal should get outstanding Pull/Merge requests
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequestConfig {
+    pub enabled: bool,
     pub(crate) auth: Auth,
     select: Vec<PrSelector>,
     template: Option<String>,
-    enabled: bool,
 }
 
 const PRS: &str = r#"

@@ -74,34 +74,45 @@ where
         } => {
             let mut sections = HashMap::new();
 
-            sections.insert(
-                Sections::Notes,
-                indoc::indoc! {r#"
-                                                             ## Notes
-
-                                                             > This is where your notes will go!
-                                                             "#}
-                .to_string(),
-            );
-
             let todos = Some(config.todo.render(&journal).await?);
             if let Some(todos) = todos {
                 sections.insert(Sections::Todos, todos);
             }
 
+            if let Some(ref config) = config.notes {
+                if config.enabled {
+                    let notes = config.template.clone().unwrap_or_else(|| {
+                        indoc::indoc! {r#"
+                        ## Notes
+
+                        > This is where your notes will go!
+
+                        "#}
+                        .to_string()
+                    });
+                    sections.insert(Sections::Notes, notes);
+                }
+            };
+
             if let Some(ref config) = config.pull_requests {
-                let prs = config.render().await?;
-                sections.insert(Sections::Prs, prs);
+                if config.enabled {
+                    let prs = config.render().await?;
+                    sections.insert(Sections::Prs, prs);
+                }
             };
 
             if let Some(ref config) = config.jira {
-                let tasks = config.render().await?;
-                sections.insert(Sections::Tasks, tasks);
+                if config.enabled {
+                    let tasks = config.render().await?;
+                    sections.insert(Sections::Tasks, tasks);
+                }
             };
 
             if let Some(ref config) = config.reminders {
-                let reminders = config.render(&journal, clock).await?;
-                sections.insert(Sections::Reminders, reminders);
+                if config.enabled {
+                    let reminders = config.render(&journal, clock).await?;
+                    sections.insert(Sections::Reminders, reminders);
+                }
             };
 
             let today = clock.today();
@@ -138,6 +149,7 @@ mod controlled_clock;
 mod test {
     use std::sync::{Arc, Mutex};
 
+    use crate::config::NotesConfig;
     use crate::todo::TodoConfig;
 
     use super::controlled_clock::ControlledClock;
@@ -158,6 +170,7 @@ mod test {
             jira: None,
             todo: TodoConfig::default(),
             sections: Vec::new(),
+            notes: Some(NotesConfig::default()),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {

@@ -39,6 +39,22 @@ pub struct Config {
     pub todo: TodoConfig,
     #[serde(default = "default_order")]
     pub sections: Vec<Sections>,
+    pub notes: Option<NotesConfig>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NotesConfig {
+    pub enabled: bool,
+    pub template: Option<String>,
+}
+
+impl Default for NotesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            template: None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
