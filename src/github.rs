@@ -23,10 +23,10 @@ pub struct PullRequestConfig {
 
 const PRS: &str = r#"
 ## Pull Requests:
+
 {{#each prs as | pr | }}
 * [ ] `{{pr.title}}` on [{{pr.repo}}]({{pr.url}}) by {{pr.author}}
 {{/each }}
-
 "#;
 
 impl PullRequestConfig {

@@ -58,10 +58,10 @@ impl Selection {
 
 const TASKS: &str = r#"
 ## Open tasks
+
 {{#each tasks as | task | }}
 * [ ] {{task.summary}} [here]({{task.task.href}})
 {{/each }}
-
 "#;
 
 impl JiraConfig {

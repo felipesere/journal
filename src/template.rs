@@ -33,7 +33,7 @@ impl Template {
             };
         }
 
-        Ok(to_be_printed.join("\n\n"))
+        Ok(to_be_printed.join("\n"))
     }
 }
 

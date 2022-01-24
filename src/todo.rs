@@ -10,10 +10,9 @@ use crate::storage::Journal;
 
 const TODO: &str = indoc::indoc! {r#"
 ## TODOs
-{{#each todos }}
-{{~this~}}
+{{#each todos as |todo| }}
+{{~todo~}}
 {{/each}}
-
 "#};
 
 #[derive(Default, Debug, Deserialize, Serialize)]
