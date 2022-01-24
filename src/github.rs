@@ -23,9 +23,9 @@ pub struct PullRequestConfig {
 
 const PRS: &str = r#"
 ## Pull Requests:
-{{# prs }}
-* [ ] {{~title~}} on [{{~repo~}}]({{~url~}}) by {{~author~}}
-{{/prs }}
+{{#each prs as | pr | }}
+* [ ] `{{pr.title}}` on [{{pr.repo}}]({{pr.url}}) by {{pr.author}}
+{{/each }}
 
 "#;
 

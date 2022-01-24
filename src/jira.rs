@@ -58,9 +58,9 @@ impl Selection {
 
 const TASKS: &str = r#"
 ## Open tasks
-{{# tasks }}
-* [ ] {{summary}} [here]({{task.href}})
-{{/tasks }}
+{{#each tasks as | task | }}
+* [ ] {{task.summary}} [here]({{task.task.href}})
+{{/each }}
 
 "#;
 

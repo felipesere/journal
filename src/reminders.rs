@@ -49,8 +49,8 @@ impl Clock for WallClock {
 
 const REMIDNERS: &str = r#"
 ## Your reminders for today:
-{{#each reminders }}
-* [ ] {{ this }}
+{{#each reminders as | reminder | }}
+* [ ] {{ reminder }}
 {{/each }}
 
 "#;
