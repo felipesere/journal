@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use anyhow::Result;
 use time::{format_description, Date};
 
-use crate::config::{default_order, Sections};
+use crate::config::{default_order, SectionName};
 
 pub struct Template {
     pub title: String,
     pub today: Date,
-    pub sections: HashMap<Sections, String>,
+    pub sections: HashMap<SectionName, String>,
 }
 
 impl Template {
-    pub fn render(self, order: Vec<Sections>) -> Result<String> {
+    pub fn render(self, order: Vec<SectionName>) -> Result<String> {
         let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
 
         let Template {
@@ -37,7 +37,7 @@ impl Template {
     }
 }
 
-fn expand_with_defaults(mut order: Vec<Sections>) -> Vec<Sections> {
+fn expand_with_defaults(mut order: Vec<SectionName>) -> Vec<SectionName> {
     let mut df = default_order();
 
     for section in &order {
@@ -61,13 +61,13 @@ mod tests {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
             sections: maplit::hashmap! {
-                Sections::Todos => indoc! {r"
+                SectionName::Todos => indoc! {r"
                 ## TODOs
 
                 * [] a todo
                 * [] another one
                 "}.to_string(),
-                Sections::Notes => indoc! {r"
+                SectionName::Notes => indoc! {r"
                 ## Notes
 
                 > This is where your notes will go!
@@ -92,7 +92,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![Sections::Notes, Sections::Todos, Sections::Prs])?
+            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Prs])?
         );
         Ok(())
     }
@@ -103,18 +103,18 @@ mod tests {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
             sections: maplit::hashmap! {
-                Sections::Notes => indoc! {r"
+                SectionName::Notes => indoc! {r"
                 ## Notes
 
                 > This is where your notes will go!
                 "}.to_string(),
-                Sections::Todos => indoc::indoc! {r"
+                SectionName::Todos => indoc::indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
                 "}.to_string(),
-                Sections::Prs => indoc::indoc! {r"
+                SectionName::Prs => indoc::indoc! {r"
                 ## Pull Requests
 
                 * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
@@ -144,7 +144,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![Sections::Notes, Sections::Todos, Sections::Prs])?
+            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Prs])?
         );
         Ok(())
     }
@@ -155,18 +155,18 @@ mod tests {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
             sections: maplit::hashmap! {
-                Sections::Notes => indoc! {r"
+                SectionName::Notes => indoc! {r"
                 ## Notes
 
                 > This is where your notes will go!
                 "}.to_string(),
-                Sections::Todos => indoc::indoc! {r"
+                SectionName::Todos => indoc::indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
                 "}.to_string(),
-                Sections::Reminders => indoc::indoc! {r"
+                SectionName::Reminders => indoc::indoc! {r"
                 ## Your reminders for today:
 
                 * [ ] Buy milk
@@ -198,7 +198,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![Sections::Notes, Sections::Todos, Sections::Reminders])?
+            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Reminders])?
         );
         Ok(())
     }

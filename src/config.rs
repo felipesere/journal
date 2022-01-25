@@ -38,7 +38,7 @@ pub struct Config {
     #[serde(default)]
     pub todo: TodoConfig,
     #[serde(default = "default_order")]
-    pub sections: Vec<Sections>,
+    pub sections: Vec<SectionName>,
     pub notes: Option<NotesConfig>,
 }
 
@@ -58,7 +58,7 @@ impl Default for NotesConfig {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
-pub enum Sections {
+pub enum SectionName {
     #[serde(rename = "notes")]
     Notes,
     #[serde(rename = "todos")]
@@ -71,8 +71,8 @@ pub enum Sections {
     Reminders,
 }
 
-pub fn default_order() -> Vec<Sections> {
-    use Sections::*;
+pub fn default_order() -> Vec<SectionName> {
+    use SectionName::*;
     vec![Notes, Todos, Prs, Tasks, Reminders]
 }
 

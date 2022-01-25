@@ -4,7 +4,7 @@ use clap::{AppSettings, StructOpt};
 use std::collections::HashMap;
 use std::path::Path;
 
-use config::{ConfigCmd, Sections};
+use config::{ConfigCmd, SectionName};
 pub use reminders::{Clock, ReminderCmd, ReminderConfig, Reminders, WallClock};
 use storage::Journal;
 use template::Template;
@@ -76,7 +76,7 @@ where
 
             let todos = Some(config.todo.render(&journal).await?);
             if let Some(todos) = todos {
-                sections.insert(Sections::Todos, todos);
+                sections.insert(SectionName::Todos, todos);
             }
 
             if let Some(ref config) = config.notes {
@@ -90,28 +90,28 @@ where
                         "#}
                         .to_string()
                     });
-                    sections.insert(Sections::Notes, notes);
+                    sections.insert(SectionName::Notes, notes);
                 }
             };
 
             if let Some(ref config) = config.pull_requests {
                 if config.enabled {
                     let prs = config.render().await?;
-                    sections.insert(Sections::Prs, prs);
+                    sections.insert(SectionName::Prs, prs);
                 }
             };
 
             if let Some(ref config) = config.jira {
                 if config.enabled {
                     let tasks = config.render().await?;
-                    sections.insert(Sections::Tasks, tasks);
+                    sections.insert(SectionName::Tasks, tasks);
                 }
             };
 
             if let Some(ref config) = config.reminders {
                 if config.enabled {
                     let reminders = config.render(&journal, clock).await?;
-                    sections.insert(Sections::Reminders, reminders);
+                    sections.insert(SectionName::Reminders, reminders);
                 }
             };
 
