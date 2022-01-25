@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::{
-    github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, todo::TodoConfig,
+    github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, storage::Journal,
+    todo::TodoConfig, Clock,
 };
 
 #[derive(Debug, StructOpt)]
@@ -31,29 +32,122 @@ impl ConfigCmd {
 /// Configuration we can get either from a file or from ENV variables
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub dir: PathBuf,
-    pub pull_requests: Option<PullRequestConfig>,
-    pub reminders: Option<ReminderConfig>,
-    pub jira: Option<JiraConfig>,
-    #[serde(default)]
-    pub todo: TodoConfig,
     #[serde(default = "default_order")]
     pub sections: Vec<SectionName>,
-    pub notes: Option<NotesConfig>,
+    pub dir: PathBuf,
+
+    pub todos: Option<Enabled<TodoConfig>>,
+    pub notes: Option<Enabled<NotesConfig>>,
+    pub jira: Option<Enabled<JiraConfig>>,
+    pub reminders: Option<Enabled<ReminderConfig>>,
+    pub pull_requests: Option<Enabled<PullRequestConfig>>,
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct Enabled<T> {
+    enabled: bool,
+    #[serde(flatten)]
+    inner: T,
+}
+
+impl<T> Enabled<T> {
+    pub fn new(inner: T) -> Enabled<T> {
+        Self {
+            enabled: true,
+            inner,
+        }
+    }
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+}
+
+impl Config {
+    pub fn enabled_sections(&self) -> Vec<(SectionName, Box<dyn Section>)> {
+        let mut sections = Vec::new();
+
+        if let Some(ref todos) = &self.todos {
+            if todos.enabled {
+                sections.push((
+                    SectionName::Todos,
+                    Box::new(todos.inner.clone()) as Box<dyn Section>,
+                ))
+            }
+        }
+
+        if let Some(ref notes) = &self.notes {
+            if notes.enabled {
+                sections.push((
+                    SectionName::Notes,
+                    Box::new(notes.inner.clone()) as Box<dyn Section>,
+                ))
+            }
+        }
+
+        if let Some(ref jira) = &self.jira {
+            if jira.enabled {
+                sections.push((
+                    SectionName::Tasks,
+                    Box::new(jira.inner.clone()) as Box<dyn Section>,
+                ))
+            }
+        }
+
+        if let Some(ref reminders) = &self.reminders {
+            if reminders.enabled {
+                sections.push((
+                    SectionName::Reminders,
+                    Box::new(reminders.inner.clone()) as Box<dyn Section>,
+                ))
+            }
+        }
+
+        if let Some(ref pull_requests) = &self.pull_requests {
+            if pull_requests.enabled {
+                sections.push((
+                    SectionName::Prs,
+                    Box::new(pull_requests.inner.clone()) as Box<dyn Section>,
+                ))
+            }
+        }
+
+        sections
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct NotesConfig {
-    pub enabled: bool,
-    pub template: Option<String>,
+    #[serde(default = "default_note_template")]
+    pub template: String,
+}
+
+fn default_note_template() -> String {
+    indoc::indoc! {r#"
+  ## Notes
+
+  > This is where your notes will go!
+
+  "#}
+    .to_string()
+}
+
+#[async_trait::async_trait]
+pub trait Section {
+    async fn render(&self, journal: &Journal, clock: &dyn Clock) -> Result<String>;
 }
 
 impl Default for NotesConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            template: None,
+            template: default_note_template(),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl Section for NotesConfig {
+    async fn render(&self, _: &Journal, _: &dyn Clock) -> Result<String> {
+        Ok(self.template.clone())
     }
 }
 
@@ -118,6 +212,7 @@ mod tests {
                 ".journal.yml",
                 indoc::indoc! { r#"
                         dir: file/from/yaml
+
                         pull_requests:
                           enabled: true
                           auth:
@@ -127,7 +222,7 @@ mod tests {
                               authors:
                                 - felipesere
                         reminders:
-                            enabled: true
+                          enabled: true
                         "#
                 },
             )?;

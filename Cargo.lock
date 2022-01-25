@@ -839,6 +839,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_fs",
+ "async-trait",
  "clap",
  "data-test",
  "dirs",

@@ -6,13 +6,15 @@ use jsonpath::Selector;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+use crate::config::Section;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 struct JiraAuth {
     user: String,
     personal_access_token: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[serde(transparent)]
 struct Jql(HashMap<String, String>);
 
@@ -27,13 +29,31 @@ impl Jql {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct JiraConfig {
-    pub enabled: bool,
     base_url: String,
     auth: JiraAuth,
     query: Jql,
     template: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl Section for JiraConfig {
+    async fn render(&self, _: &crate::storage::Journal, _: &dyn crate::Clock) -> Result<String> {
+        let tasks = self.get_matching_tasks().await?;
+
+        #[derive(Serialize)]
+        struct C {
+            tasks: Vec<Task>,
+        }
+
+        let template = self.template.clone().unwrap_or_else(|| TASKS.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("tasks", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render("tasks", &C { tasks }).map_err(|e| e.into())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -65,22 +85,6 @@ const TASKS: &str = r#"
 "#;
 
 impl JiraConfig {
-    pub async fn render(&self) -> Result<String> {
-        let tasks = self.get_matching_tasks().await?;
-
-        #[derive(Serialize)]
-        struct C {
-            tasks: Vec<Task>,
-        }
-
-        let template = self.template.clone().unwrap_or_else(|| TASKS.to_string());
-
-        let mut tt = Handlebars::new();
-        tt.register_template_string("tasks", template)?;
-        tt.register_escape_fn(handlebars::no_escape);
-        tt.render("tasks", &C { tasks }).map_err(|e| e.into())
-    }
-
     pub async fn get_matching_tasks(&self) -> Result<Vec<Task>> {
         let params = [
             ("jql", self.query.to_query()),
@@ -134,7 +138,6 @@ mod tests {
     #[test]
     fn it_works() {
         let raw = indoc! {r#"
-        enabled: true
         auth:
           user: foo
           personal_access_token: bar
@@ -146,7 +149,6 @@ mod tests {
         "#};
 
         let config: JiraConfig = serde_yaml::from_str(raw).unwrap();
-        assert!(config.enabled);
 
         assert_eq!(config.base_url, "https://x.y/abc");
 

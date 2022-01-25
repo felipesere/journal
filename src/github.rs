@@ -12,10 +12,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
+use crate::config::Section;
+
 /// Configuration for how journal should get outstanding Pull/Merge requests
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PullRequestConfig {
-    pub enabled: bool,
     pub(crate) auth: Auth,
     select: Vec<PrSelector>,
     template: Option<String>,
@@ -29,8 +30,9 @@ const PRS: &str = r#"
 {{/each }}
 "#;
 
-impl PullRequestConfig {
-    pub async fn render(&self) -> Result<String> {
+#[async_trait::async_trait]
+impl Section for PullRequestConfig {
+    async fn render(&self, _: &crate::storage::Journal, _: &dyn crate::Clock) -> Result<String> {
         let prs = self.get_matching_prs().await?;
 
         #[derive(Serialize)]
@@ -45,12 +47,10 @@ impl PullRequestConfig {
         tt.register_escape_fn(handlebars::no_escape);
         tt.render("prs", &C { prs }).map_err(|e| anyhow::anyhow!(e))
     }
+}
 
+impl PullRequestConfig {
     pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
-        if !self.enabled {
-            return Ok(Vec::new());
-        }
-
         let Auth::PersonalAccessToken(ref token) = self.auth;
 
         let octocrab = OctocrabBuilder::new()
@@ -234,7 +234,7 @@ pub(crate) struct LocalFilter {
     pub(crate) labels: HashSet<String>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Deserialize, PartialEq, Eq, Serialize, Clone)]
 pub(crate) enum Auth {
     #[serde(rename = "personal_access_token")]
     PersonalAccessToken(String),

@@ -8,6 +8,7 @@ doctest = false
 
 [dependencies]
 anyhow = "1.0"
+async-trait = "0.1.52"
 clap = { version = "3.0.0-rc.3", features = ["derive"] }
 dirs = "4.0.0"
 figment = { version = "0.10.6", features = ["test", "env", "yaml"] }

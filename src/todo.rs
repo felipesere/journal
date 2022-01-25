@@ -6,6 +6,7 @@ use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
 use tracing::Level;
 
+use crate::config::Section;
 use crate::storage::Journal;
 
 const TODO: &str = indoc::indoc! {r#"
@@ -15,13 +16,14 @@ const TODO: &str = indoc::indoc! {r#"
 {{/each}}
 "#};
 
-#[derive(Default, Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize, Clone)]
 pub struct TodoConfig {
     template: Option<String>,
 }
 
-impl TodoConfig {
-    pub async fn render(&self, journal: &Journal) -> Result<String> {
+#[async_trait::async_trait]
+impl Section for TodoConfig {
+    async fn render(&self, journal: &Journal, _: &dyn crate::Clock) -> Result<String> {
         let todos = match journal.latest_entry() {
             Ok(None) => Vec::new(),
             Ok(Some(last_entry)) => {

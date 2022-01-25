@@ -4,7 +4,7 @@ use clap::{AppSettings, StructOpt};
 use std::collections::HashMap;
 use std::path::Path;
 
-use config::{ConfigCmd, SectionName};
+use config::ConfigCmd;
 pub use reminders::{Clock, ReminderCmd, ReminderConfig, Reminders, WallClock};
 use storage::Journal;
 use template::Template;
@@ -60,7 +60,7 @@ where
     match cli.cmd {
         Cmd::Config(cmd) => cmd.execute(config)?,
         Cmd::Reminder(cmd) => {
-            let with_reminders = config.reminders.as_ref().map_or(false, |c| c.enabled);
+            let with_reminders = config.reminders.as_ref().map_or(false, |c| c.is_enabled());
 
             if with_reminders {
                 cmd.execute(config, clock)?;
@@ -74,46 +74,11 @@ where
         } => {
             let mut sections = HashMap::new();
 
-            let todos = Some(config.todo.render(&journal).await?);
-            if let Some(todos) = todos {
-                sections.insert(SectionName::Todos, todos);
+            let enabled_sections = config.enabled_sections();
+
+            for (name, section) in &enabled_sections {
+                sections.insert(name.clone(), section.render(&journal, clock).await?);
             }
-
-            if let Some(ref config) = config.notes {
-                if config.enabled {
-                    let notes = config.template.clone().unwrap_or_else(|| {
-                        indoc::indoc! {r#"
-                        ## Notes
-
-                        > This is where your notes will go!
-
-                        "#}
-                        .to_string()
-                    });
-                    sections.insert(SectionName::Notes, notes);
-                }
-            };
-
-            if let Some(ref config) = config.pull_requests {
-                if config.enabled {
-                    let prs = config.render().await?;
-                    sections.insert(SectionName::Prs, prs);
-                }
-            };
-
-            if let Some(ref config) = config.jira {
-                if config.enabled {
-                    let tasks = config.render().await?;
-                    sections.insert(SectionName::Tasks, tasks);
-                }
-            };
-
-            if let Some(ref config) = config.reminders {
-                if config.enabled {
-                    let reminders = config.render(&journal, clock).await?;
-                    sections.insert(SectionName::Reminders, reminders);
-                }
-            };
 
             let today = clock.today();
 
@@ -149,7 +114,7 @@ mod controlled_clock;
 mod test {
     use std::sync::{Arc, Mutex};
 
-    use crate::config::NotesConfig;
+    use crate::config::{Enabled, NotesConfig};
     use crate::todo::TodoConfig;
 
     use super::controlled_clock::ControlledClock;
@@ -170,7 +135,7 @@ mod test {
             jira: None,
             todo: TodoConfig::default(),
             sections: Vec::new(),
-            notes: Some(NotesConfig::default()),
+            notes: Some(Enabled::new(NotesConfig::default())),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {

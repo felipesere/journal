@@ -33,7 +33,7 @@ impl Template {
             };
         }
 
-        Ok(to_be_printed.join("\n"))
+        Ok(to_be_printed.join("\n\n"))
     }
 }
 
@@ -92,7 +92,11 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Prs])?
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Prs
+            ])?
         );
         Ok(())
     }
@@ -144,7 +148,11 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Prs])?
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Prs
+            ])?
         );
         Ok(())
     }
@@ -198,7 +206,11 @@ mod tests {
 
         assert_eq!(
             expected,
-            template.render(vec![SectionName::Notes, SectionName::Todos, SectionName::Reminders])?
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Reminders
+            ])?
         );
         Ok(())
     }
