@@ -6,7 +6,7 @@ use figment::{
     Figment,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, storage::Journal,
@@ -73,45 +73,45 @@ impl<T> Enabled<T> {
 }
 
 impl Config {
-    pub fn enabled_sections(&self) -> Vec<(SectionName, Box<dyn Section>)> {
-        let mut sections = Vec::new();
+    pub fn enabled_sections(&self) -> HashMap<SectionName, Box<dyn Section>> {
+        let mut sections = HashMap::new();
 
         if self.todos.is_enabled() {
-            sections.push((
+            sections.insert(
                 SectionName::Todos,
                 Box::new(self.todos.inner.clone()) as Box<dyn Section>,
-            ))
+            );
         }
 
         if self.notes.is_enabled() {
-            sections.push((
+            sections.insert(
                 SectionName::Notes,
                 Box::new(self.notes.inner.clone()) as Box<dyn Section>,
-            ))
+            );
         }
 
         if self.reminders.is_enabled() {
-            sections.push((
+            sections.insert(
                 SectionName::Reminders,
                 Box::new(self.reminders.inner.clone()) as Box<dyn Section>,
-            ))
+            );
         }
 
         if let Some(ref jira) = self.jira {
             if jira.is_enabled() {
-                sections.push((
+                sections.insert(
                     SectionName::Tasks,
                     Box::new(jira.inner.clone()) as Box<dyn Section>,
-                ))
+                );
             }
         }
 
         if let Some(ref pull_requests) = &self.pull_requests {
             if pull_requests.enabled {
-                sections.push((
+                sections.insert(
                     SectionName::Prs,
                     Box::new(pull_requests.inner.clone()) as Box<dyn Section>,
-                ))
+                );
             }
         }
 
@@ -155,7 +155,7 @@ impl Section for NotesConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Hash)]
 pub enum SectionName {
     #[serde(rename = "notes")]
     Notes,
@@ -202,9 +202,68 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::path::PathBuf;
 
+    use crate::config::SectionName::*;
     use crate::Config;
+
+    #[test]
+    fn minimal_config() {
+        figment::Jail::expect_with(|jail| {
+            let config_path = jail.directory().join(".journal.yml");
+            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+
+            jail.create_file(
+                ".journal.yml",
+                indoc::indoc! { r#"
+                    dir: file/from/yaml
+                    "#
+                },
+            )?;
+
+            let config = Config::load()?;
+            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
+
+            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+            assert_eq!(sections, set(vec![Todos, Notes, Reminders]));
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn minimal_config_with_all_defaults_disabled() {
+        figment::Jail::expect_with(|jail| {
+            let config_path = jail.directory().join(".journal.yml");
+            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+
+            jail.create_file(
+                ".journal.yml",
+                indoc::indoc! { r#"
+                    dir: file/from/yaml
+
+                    reminders:
+                        enabled: false
+
+                    notes:
+                        enabled: false
+
+                    todos:
+                        enabled: false
+                    "#
+                },
+            )?;
+
+            let config = Config::load()?;
+            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
+
+            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+            assert_eq!(sections, set(vec![]));
+
+            Ok(())
+        });
+    }
 
     #[test]
     fn config_read_from_yml() {
@@ -225,18 +284,21 @@ mod tests {
                             - repo: felipesere/sane-flags
                               authors:
                                 - felipesere
-
-                        reminders:
-                          enabled: true
                         "#
                 },
             )?;
 
             let config = Config::load()?;
             assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
-            assert!(config.pull_requests.is_some());
+
+            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+            assert_eq!(sections, set(vec![Prs, Todos, Notes, Reminders]));
 
             Ok(())
         });
+    }
+
+    fn set<T: std::hash::Hash + std::cmp::Eq>(elements: Vec<T>) -> HashSet<T> {
+        HashSet::from_iter(elements)
     }
 }
