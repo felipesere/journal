@@ -60,7 +60,7 @@ where
     match cli.cmd {
         Cmd::Config(cmd) => cmd.execute(config)?,
         Cmd::Reminder(cmd) => {
-            let with_reminders = config.reminders.as_ref().map_or(false, |c| c.is_enabled());
+            let with_reminders = config.reminders.is_enabled();
 
             if with_reminders {
                 cmd.execute(config, clock)?;
@@ -114,9 +114,6 @@ mod controlled_clock;
 mod test {
     use std::sync::{Arc, Mutex};
 
-    use crate::config::{Enabled, NotesConfig};
-    use crate::todo::TodoConfig;
-
     use super::controlled_clock::ControlledClock;
     use super::*;
     use assert_fs::{prelude::*, TempDir};
@@ -131,11 +128,11 @@ mod test {
         let config = Config {
             dir: journal_home.to_path_buf(),
             pull_requests: None,
-            reminders: None,
+            reminders: Default::default(),
             jira: None,
-            todo: TodoConfig::default(),
+            todos: Default::default(),
             sections: Vec::new(),
-            notes: Some(Enabled::new(NotesConfig::default())),
+            notes: Default::default(),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {

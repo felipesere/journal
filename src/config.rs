@@ -36,10 +36,14 @@ pub struct Config {
     pub sections: Vec<SectionName>,
     pub dir: PathBuf,
 
-    pub todos: Option<Enabled<TodoConfig>>,
-    pub notes: Option<Enabled<NotesConfig>>,
+    #[serde(default)]
+    pub todos: Enabled<TodoConfig>,
+    #[serde(default)]
+    pub notes: Enabled<NotesConfig>,
+    #[serde(default)]
+    pub reminders: Enabled<ReminderConfig>,
+
     pub jira: Option<Enabled<JiraConfig>>,
-    pub reminders: Option<Enabled<ReminderConfig>>,
     pub pull_requests: Option<Enabled<PullRequestConfig>>,
 }
 
@@ -48,6 +52,12 @@ pub struct Enabled<T> {
     enabled: bool,
     #[serde(flatten)]
     inner: T,
+}
+
+impl<T: Default> Default for Enabled<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
 }
 
 impl<T> Enabled<T> {
@@ -66,38 +76,32 @@ impl Config {
     pub fn enabled_sections(&self) -> Vec<(SectionName, Box<dyn Section>)> {
         let mut sections = Vec::new();
 
-        if let Some(ref todos) = &self.todos {
-            if todos.enabled {
-                sections.push((
-                    SectionName::Todos,
-                    Box::new(todos.inner.clone()) as Box<dyn Section>,
-                ))
-            }
+        if self.todos.is_enabled() {
+            sections.push((
+                SectionName::Todos,
+                Box::new(self.todos.inner.clone()) as Box<dyn Section>,
+            ))
         }
 
-        if let Some(ref notes) = &self.notes {
-            if notes.enabled {
-                sections.push((
-                    SectionName::Notes,
-                    Box::new(notes.inner.clone()) as Box<dyn Section>,
-                ))
-            }
+        if self.notes.is_enabled() {
+            sections.push((
+                SectionName::Notes,
+                Box::new(self.notes.inner.clone()) as Box<dyn Section>,
+            ))
         }
 
-        if let Some(ref jira) = &self.jira {
-            if jira.enabled {
+        if self.reminders.is_enabled() {
+            sections.push((
+                SectionName::Reminders,
+                Box::new(self.reminders.inner.clone()) as Box<dyn Section>,
+            ))
+        }
+
+        if let Some(ref jira) = self.jira {
+            if jira.is_enabled() {
                 sections.push((
                     SectionName::Tasks,
                     Box::new(jira.inner.clone()) as Box<dyn Section>,
-                ))
-            }
-        }
-
-        if let Some(ref reminders) = &self.reminders {
-            if reminders.enabled {
-                sections.push((
-                    SectionName::Reminders,
-                    Box::new(reminders.inner.clone()) as Box<dyn Section>,
                 ))
             }
         }
@@ -121,6 +125,14 @@ pub struct NotesConfig {
     pub template: String,
 }
 
+impl Default for NotesConfig {
+    fn default() -> Self {
+        Self {
+            template: default_note_template(),
+        }
+    }
+}
+
 fn default_note_template() -> String {
     indoc::indoc! {r#"
   ## Notes
@@ -134,14 +146,6 @@ fn default_note_template() -> String {
 #[async_trait::async_trait]
 pub trait Section {
     async fn render(&self, journal: &Journal, clock: &dyn Clock) -> Result<String>;
-}
-
-impl Default for NotesConfig {
-    fn default() -> Self {
-        Self {
-            template: default_note_template(),
-        }
-    }
 }
 
 #[async_trait::async_trait]
@@ -221,6 +225,7 @@ mod tests {
                             - repo: felipesere/sane-flags
                               authors:
                                 - felipesere
+
                         reminders:
                           enabled: true
                         "#
@@ -230,7 +235,6 @@ mod tests {
             let config = Config::load()?;
             assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
             assert!(config.pull_requests.is_some());
-            assert!(config.reminders.is_some());
 
             Ok(())
         });

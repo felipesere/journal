@@ -58,7 +58,20 @@ const REMIDNERS: &str = r#"
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct ReminderConfig {
-    pub template: Option<String>,
+    #[serde(default = "default_reminders_template")]
+    pub template: String,
+}
+
+fn default_reminders_template() -> String {
+    REMIDNERS.to_string()
+}
+
+impl Default for ReminderConfig {
+    fn default() -> Self {
+        Self {
+            template: default_reminders_template(),
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -74,13 +87,8 @@ impl Section for ReminderConfig {
             reminders: Vec<String>,
         }
 
-        let template = self
-            .template
-            .clone()
-            .unwrap_or_else(|| REMIDNERS.to_string());
-
         let mut tt = Handlebars::new();
-        tt.register_template_string("reminders", template)?;
+        tt.register_template_string("reminders", self.template.to_string())?;
         tt.register_escape_fn(handlebars::no_escape);
         tt.render(
             "reminders",

@@ -16,9 +16,17 @@ const TODO: &str = indoc::indoc! {r#"
 {{/each}}
 "#};
 
-#[derive(Default, Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TodoConfig {
     template: Option<String>,
+}
+
+impl Default for TodoConfig {
+    fn default() -> Self {
+        Self {
+            template: Some(TODO.to_string()),
+        }
+    }
 }
 
 #[async_trait::async_trait]
