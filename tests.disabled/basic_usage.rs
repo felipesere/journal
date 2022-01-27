@@ -24,7 +24,7 @@ fn when_the_config_is_entirely_missing_it_reports_the_error() {
         .args(&["new", "Through the Looking-Glass", "--stdout"])
         .assert()
         .failure()
-        .stderr(indoc::indoc! {r#"
+        .stderr(indoc! {r#"
         Error: Failed to load configuration
 
         Caused by:
@@ -53,7 +53,7 @@ fn reads_journal_config_from_the_home_directory() {
         .assert()
         .success()
         .stdout(
-            is_match(indoc::indoc! {r#"
+            is_match(indoc! {r#"
         # Through the Looking-Glass on \d\d\d\d-\d\d-\d\d
 
         ## Notes
@@ -117,7 +117,7 @@ fn removes_todos_that_are_already_checked() {
     let fake_journal_directory = TempDir::new().unwrap();
     fake_journal_directory
         .child("a-previous-file.md")
-        .write_str(indoc::indoc! { r#"
+        .write_str(indoc! { r#"
         # Through the Looking-Glass on {date}
 
         ## Notes

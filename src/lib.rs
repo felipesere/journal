@@ -112,6 +112,7 @@ mod controlled_clock;
 
 #[cfg(test)]
 mod test {
+    use indoc::indoc;
     use std::sync::{Arc, Mutex};
 
     use super::controlled_clock::ControlledClock;
@@ -155,7 +156,7 @@ mod test {
         journal_home
             .child("2020-04-23-the-next-one.md")
             .assert(exists())
-            .assert(diff(indoc::indoc! {r#"
+            .assert(diff(indoc! {r#"
                 # The Next One on 2020-04-23
 
                 ## Notes

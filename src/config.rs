@@ -1,12 +1,8 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::StructOpt;
-use figment::{
-    providers::{Env, Format, Yaml},
-    value::{Uncased, UncasedStr},
-    Figment,
-};
+use indoc::indoc;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, io::Read, path::PathBuf};
 
 use crate::{
     github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, storage::Journal,
@@ -134,7 +130,7 @@ impl Default for NotesConfig {
 }
 
 fn default_note_template() -> String {
-    indoc::indoc! {r#"
+    indoc! {r#"
   ## Notes
 
   > This is where your notes will go!
@@ -174,12 +170,8 @@ pub fn default_order() -> Vec<SectionName> {
     vec![Notes, Todos, Prs, Tasks, Reminders]
 }
 
-fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
-    Uncased::new(input.as_str().replace("__", "."))
-}
-
 impl Config {
-    pub fn load() -> Result<Self, figment::Error> {
+    pub fn config_path() -> Result<PathBuf> {
         let config_path = std::env::var("JOURNAL__CONFIG").map_or_else(
             |_| {
                 let home = dirs::home_dir().expect("Unable to get the the users 'home' directory");
@@ -189,19 +181,20 @@ impl Config {
         );
 
         if !config_path.exists() {
-            return Err(figment::Error::from(format!("{} does not exist. We need a configuration file to work.\nYou can either use a '.journal.yaml' file in your HOME directory or configure it with the JOURNAL__CONFIG environment variable", config_path.to_string_lossy())));
+            bail!(format!("{} does not exist. We need a configuration file to work.\nYou can either use a '.journal.yaml' file in your HOME directory or configure it with the JOURNAL__CONFIG environment variable", config_path.to_string_lossy()));
         }
 
-        tracing::info!("Loading config from {:?}", config_path);
-        Figment::new()
-            .merge(Yaml::file(config_path))
-            .merge(Env::prefixed("JOURNAL__").map(double_underscore_separated))
-            .extract()
+        Ok(config_path)
+    }
+
+    pub fn from_reader(reader: impl Read) -> Result<Self> {
+        serde_yaml::from_reader(reader).map_err(|e| anyhow::anyhow!(e))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use std::collections::HashSet;
     use std::path::PathBuf;
 
@@ -210,92 +203,62 @@ mod tests {
 
     #[test]
     fn minimal_config() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
-
-            jail.create_file(
-                ".journal.yml",
-                indoc::indoc! { r#"
+        let r = indoc! { r#"
                     dir: file/from/yaml
                     "#
-                },
-            )?;
+        };
 
-            let config = Config::load()?;
-            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
 
-            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
-            assert_eq!(sections, set(vec![Todos, Notes, Reminders]));
-
-            Ok(())
-        });
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![Todos, Notes, Reminders]));
     }
 
     #[test]
     fn minimal_config_with_all_defaults_disabled() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+        let r = indoc! { r#"
+                     dir: file/from/yaml
 
-            jail.create_file(
-                ".journal.yml",
-                indoc::indoc! { r#"
-                    dir: file/from/yaml
+                     reminders:
+                         enabled: false
 
-                    reminders:
-                        enabled: false
+                     notes:
+                         enabled: false
 
-                    notes:
-                        enabled: false
-
-                    todos:
-                        enabled: false
+                     todos:
+                         enabled: false
                     "#
-                },
-            )?;
+        };
 
-            let config = Config::load()?;
-            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
 
-            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
-            assert_eq!(sections, set(vec![]));
-
-            Ok(())
-        });
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![]));
     }
 
     #[test]
     fn config_read_from_yml() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+        let r = indoc! { r#"
+                    dir: file/from/yaml
 
-            jail.create_file(
-                ".journal.yml",
-                indoc::indoc! { r#"
-                        dir: file/from/yaml
+                    pull_requests:
+                      enabled: true
+                      auth:
+                        personal_access_token: "my-access-token"
+                      select:
+                        - repo: felipesere/sane-flags
+                          authors:
+                            - felipesere
+                    "#
+        };
 
-                        pull_requests:
-                          enabled: true
-                          auth:
-                            personal_access_token: "my-access-token"
-                          select:
-                            - repo: felipesere/sane-flags
-                              authors:
-                                - felipesere
-                        "#
-                },
-            )?;
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
 
-            let config = Config::load()?;
-            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
-
-            let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
-            assert_eq!(sections, set(vec![Prs, Todos, Notes, Reminders]));
-
-            Ok(())
-        });
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![Prs, Todos, Notes, Reminders]));
     }
 
     fn set<T: std::hash::Hash + std::cmp::Eq>(elements: Vec<T>) -> HashSet<T> {

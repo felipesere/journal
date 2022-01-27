@@ -112,13 +112,13 @@ mod tests {
 
                 > This is where your notes will go!
                 "}.to_string(),
-                SectionName::Todos => indoc::indoc! {r"
+                SectionName::Todos => indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
                 "}.to_string(),
-                SectionName::Prs => indoc::indoc! {r"
+                SectionName::Prs => indoc! {r"
                 ## Pull Requests
 
                 * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
@@ -168,13 +168,13 @@ mod tests {
 
                 > This is where your notes will go!
                 "}.to_string(),
-                SectionName::Todos => indoc::indoc! {r"
+                SectionName::Todos => indoc! {r"
                 ## TODOs
 
                 * [ ] a todo
                 * [ ] another one
                 "}.to_string(),
-                SectionName::Reminders => indoc::indoc! {r"
+                SectionName::Reminders => indoc! {r"
                 ## Your reminders for today:
 
                 * [ ] Buy milk

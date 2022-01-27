@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -28,7 +28,9 @@ async fn main() -> Result<()> {
     init_logs();
 
     let cli = Cli::parse();
-    let config = Config::load().context("Failed to load configuration")?;
+    let config_path: PathBuf = Config::config_path()?;
+    let config_file = std::fs::File::open(config_path)?;
+    let config = Config::from_reader(config_file).context("Failed to load configuration")?;
 
     let clock = WallClock;
     let open = |path: &Path| open::that(path).map_err(|e| anyhow::anyhow!(e));

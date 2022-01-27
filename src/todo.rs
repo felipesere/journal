@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use anyhow::Result;
 use handlebars::Handlebars;
+use indoc::indoc;
 use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
 use serde::{Deserialize, Serialize};
 use tracing::Level;
@@ -9,7 +10,7 @@ use tracing::Level;
 use crate::config::Section;
 use crate::storage::Journal;
 
-const TODO: &str = indoc::indoc! {r#"
+const TODO: &str = indoc! {r#"
 ## TODOs
 {{#each todos as |todo| }}
 {{~todo~}}
