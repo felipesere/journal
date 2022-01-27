@@ -1,9 +1,9 @@
 use anyhow::{bail, Result};
 use clap::StructOpt;
-use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, io::Read, path::PathBuf};
 
+use crate::notes::NotesConfig;
 use crate::{
     github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, storage::Journal,
     todo::TodoConfig, Clock,
@@ -115,40 +115,9 @@ impl Config {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct NotesConfig {
-    #[serde(default = "default_note_template")]
-    pub template: String,
-}
-
-impl Default for NotesConfig {
-    fn default() -> Self {
-        Self {
-            template: default_note_template(),
-        }
-    }
-}
-
-fn default_note_template() -> String {
-    indoc! {r#"
-  ## Notes
-
-  > This is where your notes will go!
-
-  "#}
-    .to_string()
-}
-
 #[async_trait::async_trait]
 pub trait Section {
     async fn render(&self, journal: &Journal, clock: &dyn Clock) -> Result<String>;
-}
-
-#[async_trait::async_trait]
-impl Section for NotesConfig {
-    async fn render(&self, _: &Journal, _: &dyn Clock) -> Result<String> {
-        Ok(self.template.clone())
-    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Hash)]

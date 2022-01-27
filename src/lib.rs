@@ -18,6 +18,7 @@ mod reminders;
 mod storage;
 mod template;
 mod todo;
+mod notes;
 
 /// Commands and arguments passed via the command line
 #[derive(Debug, StructOpt)]
@@ -74,9 +75,7 @@ where
         } => {
             let mut sections = HashMap::new();
 
-            let enabled_sections = config.enabled_sections();
-
-            for (name, section) in &enabled_sections {
+            for (name, section) in &config.enabled_sections() {
                 sections.insert(name.clone(), section.render(&journal, clock).await?);
             }
 
