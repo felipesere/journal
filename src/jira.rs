@@ -3,15 +3,23 @@ use std::collections::HashMap;
 
 use handlebars::Handlebars;
 use jsonpath::Selector;
-use serde::{Deserialize, Serialize};
+use secrecy::{ExposeSecret, Secret};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::config::Section;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct JiraAuth {
     user: String,
-    personal_access_token: String,
+    #[serde(serialize_with = "only_asterisk")]
+    personal_access_token: Secret<String>,
+}
+fn only_asterisk<S>(_: &Secret<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str("***")
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
@@ -29,7 +37,7 @@ impl Jql {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JiraConfig {
     base_url: String,
     auth: JiraAuth,
@@ -95,7 +103,7 @@ impl JiraConfig {
             .get(&self.base_url)
             .basic_auth(
                 self.auth.user.to_string(),
-                Some(self.auth.personal_access_token.to_string()),
+                Some(self.auth.personal_access_token.expose_secret()),
             )
             .query(&params)
             .send()
@@ -152,13 +160,13 @@ mod tests {
 
         assert_eq!(config.base_url, "https://x.y/abc");
 
-        assert_eq!(
-            config.auth,
-            JiraAuth {
-                user: "foo".to_string(),
-                personal_access_token: "bar".to_string(),
-            }
-        );
+        let JiraAuth {
+            user,
+            personal_access_token,
+        } = config.auth;
+
+        assert_eq!(user, "foo".to_string(),);
+        assert_eq!(*personal_access_token.expose_secret(), "bar".to_string(),);
 
         assert_eq!(
             config.query,

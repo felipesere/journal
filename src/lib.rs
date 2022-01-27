@@ -14,11 +14,11 @@ pub use config::Config;
 mod config;
 mod github;
 mod jira;
+mod notes;
 mod reminders;
 mod storage;
 mod template;
 mod todo;
-mod notes;
 
 /// Commands and arguments passed via the command line
 #[derive(Debug, StructOpt)]

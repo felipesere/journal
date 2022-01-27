@@ -1,11 +1,10 @@
-use serde::{Serialize, Deserialize};
-use indoc::indoc;
 use anyhow::Result;
+use indoc::indoc;
+use serde::{Deserialize, Serialize};
 
-
-use crate::Clock;
 use crate::config::Section;
 use crate::storage::Journal;
+use crate::Clock;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct NotesConfig {
@@ -37,4 +36,3 @@ impl Section for NotesConfig {
         Ok(self.template.clone())
     }
 }
-

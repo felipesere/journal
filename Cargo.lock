@@ -815,6 +815,7 @@ dependencies = [
  "pulldown-cmark",
  "regex",
  "reqwest",
+ "secrecy",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1526,6 +1527,16 @@ checksum = "8f05ba609c234e60bee0d547fe94a4c7e9da733d1c962cf6e59efa4cd9c8bc75"
 dependencies = [
  "lazy_static",
  "winapi",
+]
+
+[[package]]
+name = "secrecy"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bd1c54ea06cfd2f6b63219704de0b9b4f72dcc2b8fdef820be6cd799780e91e"
+dependencies = [
+ "serde",
+ "zeroize",
 ]
 
 [[package]]
@@ -2247,3 +2258,9 @@ name = "yansi"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fc79f4a1e39857fc00c3f662cbf2651c771f00e9c15fe2abc341806bd46bd71"
+
+[[package]]
+name = "zeroize"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4062c749be08d90be727e9c5895371c3a0e49b90ba2b9592dc7afda95cc2b719"

@@ -40,6 +40,7 @@ pub struct Config {
     pub reminders: Enabled<ReminderConfig>,
 
     pub jira: Option<Enabled<JiraConfig>>,
+
     pub pull_requests: Option<Enabled<PullRequestConfig>>,
 }
 
