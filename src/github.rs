@@ -8,6 +8,7 @@ use octocrab::{
     models::{pulls::PullRequest, Repository},
     Octocrab, OctocrabBuilder, Page,
 };
+use secrecy::{Secret, ExposeSecret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
@@ -54,7 +55,7 @@ impl PullRequestConfig {
         let Auth::PersonalAccessToken(ref token) = self.auth;
 
         let octocrab = OctocrabBuilder::new()
-            .personal_token(token.clone())
+            .personal_token(token.expose_secret().to_string())
             .build()?;
         let user = octocrab.current().user().await?;
         tracing::info!("Logged into GitHub as {}", user.login);
@@ -67,7 +68,7 @@ impl PullRequestConfig {
             let handle: JoinHandle<Result<Vec<Pr>>> = tokio::spawn(
                 async move {
                     // Make life easy and just create multiple instances
-                    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
+                    let octocrab = OctocrabBuilder::new().personal_token(token.expose_secret().to_string()).build()?;
                     selector.get_prs(&octocrab).await
                 }
                 .instrument(tracing::info_span!("getting prs")),
@@ -234,20 +235,25 @@ pub(crate) struct LocalFilter {
     pub(crate) labels: HashSet<String>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub(crate) enum Auth {
-    #[serde(rename = "personal_access_token")]
-    PersonalAccessToken(String),
+    #[serde(rename = "personal_access_token", serialize_with = "only_asterisk")]
+    PersonalAccessToken(Secret<String>),
 }
 
 impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Auth::PersonalAccessToken(token) => {
-                write!(f, "{}", &token[0..3])
-            }
+            &Self::PersonalAccessToken(_) => f.write_str("***"),
         }
     }
+}
+
+fn only_asterisk<S>(_: &Secret<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str("***")
 }
 
 #[derive(Debug, Serialize)]
