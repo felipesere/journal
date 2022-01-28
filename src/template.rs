@@ -1,68 +1,55 @@
-use anyhow::{anyhow, Result};
-use serde::Serialize;
-use serde_json::Value;
+use std::collections::HashMap;
+
+use anyhow::Result;
 use time::{format_description, Date};
-use tinytemplate::TinyTemplate;
 
-use crate::github::Pr;
-use crate::jira::Task;
-
-pub const DAY_TEMPLATE: &str = include_str!("../template/day.md");
+use crate::config::{default_order, SectionName};
 
 pub struct Template {
     pub title: String,
     pub today: Date,
-    pub todos: Vec<String>,
-    pub prs: Option<Vec<Pr>>,
-    pub reminders: Option<Vec<String>>,
-    pub tasks: Option<Vec<Task>>,
-}
-
-// TODO: replace this with a simple map
-#[derive(Serialize)]
-pub struct C {
-    title: String,
-    today: String,
-    todos: Vec<String>,
-    prs: Option<Vec<Pr>>,
-    reminders: Option<Vec<String>>,
-    tasks: Option<Vec<Task>>,
-}
-
-pub fn trim(value: &Value, output: &mut String) -> Result<(), tinytemplate::error::Error> {
-    if let Value::String(val) = value {
-        output.push_str(val.trim());
-    }
-    Ok(())
+    pub sections: HashMap<SectionName, String>,
 }
 
 impl Template {
-    pub fn render(self) -> Result<String> {
-        let mut tt = TinyTemplate::new();
-        tt.add_template("day.md", DAY_TEMPLATE)
-            .expect("adding tempalte");
-        tt.add_formatter("trim", trim);
-
+    pub fn render(self, order: Vec<SectionName>) -> Result<String> {
         let year_month_day = format_description::parse("[year]-[month]-[day]").unwrap();
-        let today = self.today.format(&year_month_day)?;
 
-        let c = C {
-            title: self.title,
-            todos: self.todos,
+        let Template {
+            title,
             today,
-            prs: self.prs,
-            reminders: self.reminders,
-            tasks: self.tasks,
-        };
+            sections,
+        } = self;
 
-        tt.render("day.md", &c).map_err(|e| anyhow!(e))
+        let today = today.format(&year_month_day)?;
+
+        let order = expand_with_defaults(order);
+
+        let mut to_be_printed = vec![format!("# {title} on {today}")];
+
+        for section in &order {
+            if let Some(content) = sections.get(section) {
+                to_be_printed.push(content.to_string());
+            };
+        }
+
+        Ok(to_be_printed.join("\n\n"))
     }
+}
+
+fn expand_with_defaults(mut order: Vec<SectionName>) -> Vec<SectionName> {
+    let mut df = default_order();
+
+    for section in &order {
+        df = df.into_iter().filter(|s| s != section).collect();
+    }
+
+    order.extend(df);
+    order
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -73,36 +60,44 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
-            prs: None,
-            reminders: None,
-            tasks: None,
+            sections: maplit::hashmap! {
+                SectionName::Todos => indoc! {r"
+                ## TODOs
+
+                * [] a todo
+                * [] another one
+                "}.to_string(),
+                SectionName::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+            },
         };
 
-        let expected = indoc! {r#"
+        let expected = indoc! {r"
         # Some title on 2021-12-24
 
         ## Notes
 
         > This is where your notes will go!
 
+
         ## TODOs
 
         * [] a todo
-
         * [] another one
-
-
-
-
-
-        "#}
+        "}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Prs
+            ])?
+        );
         Ok(())
     }
 
@@ -111,19 +106,24 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
-            prs: Some(vec![Pr {
-                author: "felipe".into(),
-                labels: HashSet::new(),
-                repo: "felipesere/journal".to_string(),
-                title: "Fix the thing".to_string(),
-                url: "https://github.com/felipesere/journal".into(),
-            }]),
-            reminders: None,
-            tasks: None,
+            sections: maplit::hashmap! {
+                SectionName::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+                SectionName::Todos => indoc! {r"
+                ## TODOs
+
+                * [ ] a todo
+                * [ ] another one
+                "}.to_string(),
+                SectionName::Prs => indoc! {r"
+                ## Pull Requests
+
+                * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
+                "}.to_string(),
+            },
         };
 
         let expected = indoc! {r#"
@@ -133,24 +133,27 @@ mod tests {
 
         > This is where your notes will go!
 
+
         ## TODOs
 
-        * [] a todo
-
-        * [] another one
-
+        * [ ] a todo
+        * [ ] another one
 
 
-        ## Pull Requests:
+        ## Pull Requests
 
         * [ ] Fix the thingon [felipesere/journal](https://github.com/felipesere/journal) by felipe
-
-
-
         "#}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Prs
+            ])?
+        );
         Ok(())
     }
 
@@ -159,13 +162,25 @@ mod tests {
         let template = Template {
             title: "Some title".to_string(),
             today: date!(2021 - 12 - 24),
-            todos: vec![
-                "* [] a todo\n".to_string(),
-                "* [] another one\n".to_string(),
-            ],
-            prs: None,
-            reminders: Some(vec!["Buy milk".to_string(), "Send email".to_string()]),
-            tasks: None,
+            sections: maplit::hashmap! {
+                SectionName::Notes => indoc! {r"
+                ## Notes
+
+                > This is where your notes will go!
+                "}.to_string(),
+                SectionName::Todos => indoc! {r"
+                ## TODOs
+
+                * [ ] a todo
+                * [ ] another one
+                "}.to_string(),
+                SectionName::Reminders => indoc! {r"
+                ## Your reminders for today:
+
+                * [ ] Buy milk
+                * [ ] Send email
+                "}.to_string(),
+            },
         };
 
         let expected = indoc! {r#"
@@ -175,26 +190,28 @@ mod tests {
 
         > This is where your notes will go!
 
+
         ## TODOs
 
-        * [] a todo
-
-        * [] another one
-
-
-
+        * [ ] a todo
+        * [ ] another one
 
 
         ## Your reminders for today:
 
         * [ ] Buy milk
         * [ ] Send email
-
-
         "#}
         .to_string();
 
-        assert_eq!(expected, template.render()?);
+        assert_eq!(
+            expected,
+            template.render(vec![
+                SectionName::Notes,
+                SectionName::Todos,
+                SectionName::Reminders
+            ])?
+        );
         Ok(())
     }
 }

@@ -1,17 +1,28 @@
 use anyhow::Result;
 use std::collections::HashMap;
 
+use handlebars::Handlebars;
 use jsonpath::Selector;
-use serde::{Deserialize, Serialize};
+use secrecy::{ExposeSecret, Secret};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+use crate::config::Section;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct JiraAuth {
     user: String,
-    personal_access_token: String,
+    #[serde(serialize_with = "only_asterisk")]
+    personal_access_token: Secret<String>,
+}
+fn only_asterisk<S>(_: &Secret<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str("***")
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[serde(transparent)]
 struct Jql(HashMap<String, String>);
 
@@ -26,12 +37,31 @@ impl Jql {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JiraConfig {
-    enabled: bool,
     base_url: String,
     auth: JiraAuth,
     query: Jql,
+    template: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl Section for JiraConfig {
+    async fn render(&self, _: &crate::storage::Journal, _: &dyn crate::Clock) -> Result<String> {
+        let tasks = self.get_matching_tasks().await?;
+
+        #[derive(Serialize)]
+        struct C {
+            tasks: Vec<Task>,
+        }
+
+        let template = self.template.clone().unwrap_or_else(|| TASKS.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("tasks", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render("tasks", &C { tasks }).map_err(|e| e.into())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +84,14 @@ impl Selection {
     }
 }
 
+const TASKS: &str = r#"
+## Open tasks
+
+{{#each tasks as | task | }}
+* [ ] {{task.summary}} [here]({{task.task.href}})
+{{/each }}
+"#;
+
 impl JiraConfig {
     pub async fn get_matching_tasks(&self) -> Result<Vec<Task>> {
         let params = [
@@ -65,7 +103,7 @@ impl JiraConfig {
             .get(&self.base_url)
             .basic_auth(
                 self.auth.user.to_string(),
-                Some(self.auth.personal_access_token.to_string()),
+                Some(self.auth.personal_access_token.expose_secret()),
             )
             .query(&params)
             .send()
@@ -108,7 +146,6 @@ mod tests {
     #[test]
     fn it_works() {
         let raw = indoc! {r#"
-        enabled: true
         auth:
           user: foo
           personal_access_token: bar
@@ -120,17 +157,16 @@ mod tests {
         "#};
 
         let config: JiraConfig = serde_yaml::from_str(raw).unwrap();
-        assert!(config.enabled);
 
         assert_eq!(config.base_url, "https://x.y/abc");
 
-        assert_eq!(
-            config.auth,
-            JiraAuth {
-                user: "foo".to_string(),
-                personal_access_token: "bar".to_string(),
-            }
-        );
+        let JiraAuth {
+            user,
+            personal_access_token,
+        } = config.auth;
+
+        assert_eq!(user, "foo".to_string(),);
+        assert_eq!(*personal_access_token.expose_secret(), "bar".to_string(),);
 
         assert_eq!(
             config.query,

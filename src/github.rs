@@ -3,32 +3,59 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use futures::future::join_all;
+use handlebars::Handlebars;
 use octocrab::{
     models::pulls::PullRequest,
     Octocrab, OctocrabBuilder, Page,
 };
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
 
+use crate::config::Section;
+
 /// Configuration for how journal should get outstanding Pull/Merge requests
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PullRequestConfig {
     pub(crate) auth: Auth,
     select: Vec<PrSelector>,
-    enabled: bool,
+    template: Option<String>,
+}
+
+const PRS: &str = r#"
+## Pull Requests:
+
+{{#each prs as | pr | }}
+* [ ] `{{pr.title}}` on [{{pr.repo}}]({{pr.url}}) by {{pr.author}}
+{{/each }}
+"#;
+
+#[async_trait::async_trait]
+impl Section for PullRequestConfig {
+    async fn render(&self, _: &crate::storage::Journal, _: &dyn crate::Clock) -> Result<String> {
+        let prs = self.get_matching_prs().await?;
+
+        #[derive(Serialize)]
+        struct C {
+            prs: Vec<Pr>,
+        }
+
+        let template = self.template.clone().unwrap_or_else(|| PRS.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("prs", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render("prs", &C { prs }).map_err(|e| anyhow::anyhow!(e))
+    }
 }
 
 impl PullRequestConfig {
     pub async fn get_matching_prs(&self) -> Result<Vec<Pr>> {
-        if !self.enabled {
-            return Ok(Vec::new());
-        }
-
         let Auth::PersonalAccessToken(ref token) = self.auth;
 
         let octocrab = OctocrabBuilder::new()
-            .personal_token(token.clone())
+            .personal_token(token.expose_secret().to_string())
             .build()?;
         let user = octocrab.current().user().await?;
         tracing::info!("Logged into GitHub as {}", user.login);
@@ -41,7 +68,9 @@ impl PullRequestConfig {
             let handle: JoinHandle<Result<Vec<Pr>>> = tokio::spawn(
                 async move {
                     // Make life easy and just create multiple instances
-                    let octocrab = OctocrabBuilder::new().personal_token(token).build()?;
+                    let octocrab = OctocrabBuilder::new()
+                        .personal_token(token.expose_secret().to_string())
+                        .build()?;
                     selector.get_prs(&octocrab).await
                 }
                 .instrument(tracing::info_span!("getting prs")),
@@ -163,20 +192,25 @@ pub(crate) struct LocalFilter {
     pub(crate) labels: HashSet<String>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub(crate) enum Auth {
-    #[serde(rename = "personal_access_token")]
-    PersonalAccessToken(String),
+    #[serde(rename = "personal_access_token", serialize_with = "only_asterisk")]
+    PersonalAccessToken(Secret<String>),
 }
 
 impl std::fmt::Debug for Auth {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Auth::PersonalAccessToken(token) => {
-                write!(f, "{}", &token[0..3])
-            }
+            &Self::PersonalAccessToken(_) => f.write_str("***"),
         }
     }
+}
+
+fn only_asterisk<S>(_: &Secret<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str("***")
 }
 
 #[derive(Debug, Serialize)]

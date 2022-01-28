@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{AppSettings, StructOpt};
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use config::ConfigCmd;
@@ -13,6 +14,7 @@ pub use config::Config;
 mod config;
 mod github;
 mod jira;
+mod notes;
 mod reminders;
 mod storage;
 mod template;
@@ -59,7 +61,7 @@ where
     match cli.cmd {
         Cmd::Config(cmd) => cmd.execute(config)?,
         Cmd::Reminder(cmd) => {
-            let with_reminders = config.reminders.as_ref().map_or(false, |c| c.enabled);
+            let with_reminders = config.reminders.is_enabled();
 
             if with_reminders {
                 cmd.execute(config, clock)?;
@@ -71,49 +73,21 @@ where
             title,
             write_to_stdout,
         } => {
-            let todos = match journal.latest_entry() {
-                Ok(Some(latest_entry)) => {
-                    let mut finder = todo::FindTodos::new();
-                    finder.process(&latest_entry.markdown)
-                }
-                Ok(None) => Vec::new(),
-                Err(e) => return Err(anyhow::anyhow!(e)),
-            };
+            let mut sections = HashMap::new();
 
-            let prs = if let Some(ref config) = config.pull_requests {
-                let prs = config.get_matching_prs().await?;
-                Some(prs)
-            } else {
-                None
-            };
-            let tasks = if let Some(ref config) = config.jira {
-                let tasks = config.get_matching_tasks().await?;
-                Some(tasks)
-            } else {
-                None
-            };
-
-            let reminders = if let Some(ReminderConfig { enabled: true }) = config.reminders {
-                let location = config.dir.join("reminders.json");
-                let reminders = Reminders::load(&location)?;
-
-                Some(reminders.for_today(clock))
-            } else {
-                None
-            };
+            for (name, section) in &config.enabled_sections() {
+                sections.insert(name.clone(), section.render(&journal, clock).await?);
+            }
 
             let today = clock.today();
 
             let template = Template {
                 title: title.clone(),
                 today,
-                todos,
-                prs,
-                reminders,
-                tasks,
+                sections,
             };
 
-            let out = template.render()?;
+            let out = template.render(config.sections.clone())?;
 
             if write_to_stdout {
                 print!("{}", out);
@@ -137,6 +111,7 @@ mod controlled_clock;
 
 #[cfg(test)]
 mod test {
+    use indoc::indoc;
     use std::sync::{Arc, Mutex};
 
     use super::controlled_clock::ControlledClock;
@@ -146,14 +121,18 @@ mod test {
     use time::ext::NumericalDuration;
     use time::Month::April;
 
+    #[ignore]
     #[tokio::test]
     async fn creats_various_entries_on_the_filesystem() -> Result<()> {
         let journal_home = TempDir::new()?;
         let config = Config {
             dir: journal_home.to_path_buf(),
             pull_requests: None,
-            reminders: None,
+            reminders: Default::default(),
             jira: None,
+            todos: Default::default(),
+            sections: Vec::new(),
+            notes: Default::default(),
         };
         let open_was_called = Arc::new(Mutex::new(false));
         let open = |_: &Path| {
@@ -176,18 +155,15 @@ mod test {
         journal_home
             .child("2020-04-23-the-next-one.md")
             .assert(exists())
-            .assert(diff(indoc::indoc! {r#"
+            .assert(diff(indoc! {r#"
                 # The Next One on 2020-04-23
 
                 ## Notes
 
+
                 > This is where your notes will go!
 
                 ## TODOs
-
-
-
-
 
                 "#}));
         Ok(())

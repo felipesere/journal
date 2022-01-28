@@ -10,9 +10,11 @@ use serde::{Deserialize, Serialize};
 use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
+use handlebars::Handlebars;
 use tabled::{Alignment, Column, Modify, Style, Table, Tabled};
 
-use crate::Config;
+use crate::config::Section;
+use crate::{storage::Journal, Config};
 
 const YEAR_MONTH_DAY: &[FormatItem] = time::macros::format_description!("[year]-[month]-[day]");
 
@@ -34,7 +36,7 @@ impl WeekdayExt for Date {
     }
 }
 
-pub trait Clock {
+pub trait Clock: Sync {
     fn today(&self) -> Date;
 }
 
@@ -46,9 +48,56 @@ impl Clock for WallClock {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+const REMIDNERS: &str = r#"
+## Your reminders for today:
+{{#each reminders as | reminder | }}
+* [ ] {{ reminder }}
+{{/each }}
+
+"#;
+
+#[derive(Deserialize, Serialize, Clone)]
 pub struct ReminderConfig {
-    pub enabled: bool,
+    #[serde(default = "default_reminders_template")]
+    pub template: String,
+}
+
+fn default_reminders_template() -> String {
+    REMIDNERS.to_string()
+}
+
+impl Default for ReminderConfig {
+    fn default() -> Self {
+        Self {
+            template: default_reminders_template(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Section for ReminderConfig {
+    async fn render(&self, journal: &Journal, clock: &dyn Clock) -> Result<String> {
+        let location = journal.child_file("reminders.json");
+        let reminders = Reminders::load(&location)?;
+
+        let todays_reminders = reminders.for_today(clock);
+
+        #[derive(Serialize)]
+        struct C {
+            reminders: Vec<String>,
+        }
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("reminders", self.template.to_string())?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render(
+            "reminders",
+            &C {
+                reminders: todays_reminders,
+            },
+        )
+        .map_err(|e| e.into())
+    }
 }
 
 #[derive(Debug, StructOpt)]
@@ -196,7 +245,7 @@ impl Reminders {
     }
 
     #[tracing::instrument(name = "Loading todays reminders", skip(self, clock))]
-    pub fn for_today(&self, clock: &impl Clock) -> Vec<String> {
+    pub fn for_today(&self, clock: &dyn Clock) -> Vec<String> {
         let today = clock.today();
 
         let mut reminders = Vec::new();
@@ -635,21 +684,6 @@ mod tests {
             - negative_amount ("-1.months", Err("invalid digit found in string".into()))
             - unknown_period ("1.fortnights", Err("unknown period: fortnights".into()))
             - missing_separator ("quaselgoop", Err("Unrecognized format for repeating date: quaselgoop".into()))
-        }
-    }
-
-    mod config {
-        use super::*;
-
-        #[test]
-        fn parse_config() -> Result<()> {
-            let input = r#"enabled: true"#;
-
-            let config: ReminderConfig = serde_yaml::from_str(input).unwrap();
-
-            assert!(config.enabled);
-
-            Ok(())
         }
     }
 

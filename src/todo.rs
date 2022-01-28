@@ -1,7 +1,61 @@
 use std::ops::Range;
 
+use anyhow::Result;
+use handlebars::Handlebars;
+use indoc::indoc;
 use pulldown_cmark::{Event, HeadingLevel::H2, Options, Parser, Tag};
+use serde::{Deserialize, Serialize};
 use tracing::Level;
+
+use crate::config::Section;
+use crate::storage::Journal;
+
+const TODO: &str = indoc! {r#"
+## TODOs
+{{#each todos as |todo| }}
+{{~todo~}}
+{{/each}}
+"#};
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TodoConfig {
+    template: Option<String>,
+}
+
+impl Default for TodoConfig {
+    fn default() -> Self {
+        Self {
+            template: Some(TODO.to_string()),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Section for TodoConfig {
+    async fn render(&self, journal: &Journal, _: &dyn crate::Clock) -> Result<String> {
+        let todos = match journal.latest_entry() {
+            Ok(None) => Vec::new(),
+            Ok(Some(last_entry)) => {
+                let mut finder = FindTodos::new();
+                finder.process(&last_entry.markdown)
+            }
+            Err(e) => return Err(anyhow::anyhow!(e)),
+        };
+
+        #[derive(Serialize)]
+        struct C {
+            todos: Vec<String>,
+        }
+
+        let template = self.template.clone().unwrap_or_else(|| TODO.to_string());
+
+        let mut tt = Handlebars::new();
+        tt.register_template_string("todos", template)?;
+        tt.register_escape_fn(handlebars::no_escape);
+        tt.render("todos", &C { todos })
+            .map_err(|e| anyhow::anyhow!(e))
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 enum State {

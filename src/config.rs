@@ -1,15 +1,13 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::StructOpt;
-use figment::{
-    providers::{Env, Format, Yaml},
-    value::{Uncased, UncasedStr},
-    Figment,
-};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{collections::HashMap, io::Read, path::PathBuf};
 
-use crate::reminders::ReminderConfig;
-use crate::{github::PullRequestConfig, jira::JiraConfig};
+use crate::notes::NotesConfig;
+use crate::{
+    github::PullRequestConfig, jira::JiraConfig, reminders::ReminderConfig, storage::Journal,
+    todo::TodoConfig, Clock,
+};
 
 #[derive(Debug, StructOpt)]
 pub enum ConfigCmd {
@@ -30,18 +28,120 @@ impl ConfigCmd {
 /// Configuration we can get either from a file or from ENV variables
 #[derive(Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default = "default_order")]
+    pub sections: Vec<SectionName>,
     pub dir: PathBuf,
-    pub pull_requests: Option<PullRequestConfig>,
-    pub reminders: Option<ReminderConfig>,
-    pub jira: Option<JiraConfig>,
+
+    #[serde(default)]
+    pub todos: Enabled<TodoConfig>,
+    #[serde(default)]
+    pub notes: Enabled<NotesConfig>,
+    #[serde(default)]
+    pub reminders: Enabled<ReminderConfig>,
+
+    pub jira: Option<Enabled<JiraConfig>>,
+
+    pub pull_requests: Option<Enabled<PullRequestConfig>>,
 }
 
-fn double_underscore_separated(input: &UncasedStr) -> Uncased<'_> {
-    Uncased::new(input.as_str().replace("__", "."))
+#[derive(Serialize, Deserialize)]
+pub struct Enabled<T> {
+    enabled: bool,
+    #[serde(flatten)]
+    inner: T,
+}
+
+impl<T: Default> Default for Enabled<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
+}
+
+impl<T> Enabled<T> {
+    pub fn new(inner: T) -> Enabled<T> {
+        Self {
+            enabled: true,
+            inner,
+        }
+    }
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
 }
 
 impl Config {
-    pub fn load() -> Result<Self, figment::Error> {
+    pub fn enabled_sections(&self) -> HashMap<SectionName, Box<dyn Section>> {
+        let mut sections = HashMap::new();
+
+        if self.todos.is_enabled() {
+            sections.insert(
+                SectionName::Todos,
+                Box::new(self.todos.inner.clone()) as Box<dyn Section>,
+            );
+        }
+
+        if self.notes.is_enabled() {
+            sections.insert(
+                SectionName::Notes,
+                Box::new(self.notes.inner.clone()) as Box<dyn Section>,
+            );
+        }
+
+        if self.reminders.is_enabled() {
+            sections.insert(
+                SectionName::Reminders,
+                Box::new(self.reminders.inner.clone()) as Box<dyn Section>,
+            );
+        }
+
+        if let Some(ref jira) = self.jira {
+            if jira.is_enabled() {
+                sections.insert(
+                    SectionName::Tasks,
+                    Box::new(jira.inner.clone()) as Box<dyn Section>,
+                );
+            }
+        }
+
+        if let Some(ref pull_requests) = &self.pull_requests {
+            if pull_requests.enabled {
+                sections.insert(
+                    SectionName::Prs,
+                    Box::new(pull_requests.inner.clone()) as Box<dyn Section>,
+                );
+            }
+        }
+
+        sections
+    }
+}
+
+#[async_trait::async_trait]
+pub trait Section {
+    async fn render(&self, journal: &Journal, clock: &dyn Clock) -> Result<String>;
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Hash)]
+pub enum SectionName {
+    #[serde(rename = "notes")]
+    Notes,
+    #[serde(rename = "todos")]
+    Todos,
+    #[serde(rename = "pull_requests")]
+    Prs,
+    #[serde(rename = "jira")]
+    Tasks,
+    #[serde(rename = "reminders")]
+    Reminders,
+}
+
+pub fn default_order() -> Vec<SectionName> {
+    use SectionName::*;
+    vec![Notes, Todos, Prs, Tasks, Reminders]
+}
+
+impl Config {
+    pub fn config_path() -> Result<PathBuf> {
         let config_path = std::env::var("JOURNAL__CONFIG").map_or_else(
             |_| {
                 let home = dirs::home_dir().expect("Unable to get the the users 'home' directory");
@@ -51,85 +151,87 @@ impl Config {
         );
 
         if !config_path.exists() {
-            return Err(figment::Error::from(format!("{} does not exist. We need a configuration file to work.\nYou can either use a '.journal.yaml' file in your HOME directory or configure it with the JOURNAL__CONFIG environment variable", config_path.to_string_lossy())));
+            bail!(format!("{} does not exist. We need a configuration file to work.\nYou can either use a '.journal.yaml' file in your HOME directory or configure it with the JOURNAL__CONFIG environment variable", config_path.to_string_lossy()));
         }
 
-        tracing::info!("Loading config from {:?}", config_path);
-        Figment::new()
-            .merge(Yaml::file(config_path))
-            .merge(Env::prefixed("JOURNAL__").map(double_underscore_separated))
-            .extract()
+        Ok(config_path)
+    }
+
+    pub fn from_reader(reader: impl Read) -> Result<Self> {
+        serde_yaml::from_reader(reader).map_err(|e| anyhow::anyhow!(e))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
+    use std::collections::HashSet;
     use std::path::PathBuf;
 
-    use crate::github::Auth;
+    use crate::config::SectionName::*;
     use crate::Config;
 
     #[test]
-    fn config_read_from_yml() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+    fn minimal_config() {
+        let r = indoc! { r#"
+                    dir: file/from/yaml
+                    "#
+        };
 
-            jail.create_file(
-                ".journal.yml",
-                indoc::indoc! { r#"
-                        dir: file/from/yaml
-                        pull_requests:
-                          enabled: true
-                          auth:
-                            personal_access_token: "my-access-token"
-                          select:
-                            - repo: felipesere/sane-flags
-                              authors:
-                                - felipesere
-                        reminders:
-                            enabled: true
-                        "#
-                },
-            )?;
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
 
-            let config = Config::load()?;
-            assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
-            assert!(config.pull_requests.is_some());
-            assert!(config.reminders.is_some());
-
-            Ok(())
-        });
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![Todos, Notes, Reminders]));
     }
 
-    #[ignore]
     #[test]
-    fn config_read_from_env() {
-        figment::Jail::expect_with(|jail| {
-            let config_path = jail.directory().join(".journal.yml");
-            jail.set_env("JOURNAL__CONFIG", config_path.to_string_lossy());
+    fn minimal_config_with_all_defaults_disabled() {
+        let r = indoc! { r#"
+                     dir: file/from/yaml
 
-            jail.create_file(".journal.yml", r#"dir: file/from/yaml"#)?;
-            jail.set_env("JOURNAL__DIR", "env/set/the/dir");
-            jail.set_env(
-                "JOURNAL_PULL_REQUESTS__AUTH_PERSONAL_ACCESS_TOKEN",
-                "my-access-token",
-            );
+                     reminders:
+                         enabled: false
 
-            jail.set_env("JOURNAL_PULL_REQUESTS__ENABLED", "true");
+                     notes:
+                         enabled: false
 
-            let config = Config::load()?;
+                     todos:
+                         enabled: false
+                    "#
+        };
 
-            assert_eq!(config.dir, PathBuf::from("env/set/the/dir"));
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
 
-            assert!(config.pull_requests.is_some());
-            let pull_requests = config.pull_requests.unwrap();
-            assert_eq!(
-                pull_requests.auth,
-                Auth::PersonalAccessToken("my-access-token".into())
-            );
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![]));
+    }
 
-            Ok(())
-        });
+    #[test]
+    fn config_read_from_yml() {
+        let r = indoc! { r#"
+                    dir: file/from/yaml
+
+                    pull_requests:
+                      enabled: true
+                      auth:
+                        personal_access_token: "my-access-token"
+                      select:
+                        - repo: felipesere/sane-flags
+                          authors:
+                            - felipesere
+                    "#
+        };
+
+        let config = Config::from_reader(r.as_bytes()).unwrap();
+        assert_eq!(config.dir, PathBuf::from("file/from/yaml"));
+
+        let sections: HashSet<_> = config.enabled_sections().into_keys().collect();
+        assert_eq!(sections, set(vec![Prs, Todos, Notes, Reminders]));
+    }
+
+    fn set<T: std::hash::Hash + std::cmp::Eq>(elements: Vec<T>) -> HashSet<T> {
+        HashSet::from_iter(elements)
     }
 }
