@@ -4,10 +4,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use futures::future::join_all;
 use handlebars::Handlebars;
-use octocrab::{
-    models::pulls::PullRequest,
-    Octocrab, OctocrabBuilder, Page,
-};
+use octocrab::{models::pulls::PullRequest, Octocrab, OctocrabBuilder, Page};
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
