@@ -8,7 +8,7 @@ use octocrab::{
     models::{pulls::PullRequest, Repository},
     Octocrab, OctocrabBuilder, Page,
 };
-use secrecy::{Secret, ExposeSecret};
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::task::JoinHandle;
 use tracing::{instrument, Instrument};
@@ -68,7 +68,9 @@ impl PullRequestConfig {
             let handle: JoinHandle<Result<Vec<Pr>>> = tokio::spawn(
                 async move {
                     // Make life easy and just create multiple instances
-                    let octocrab = OctocrabBuilder::new().personal_token(token.expose_secret().to_string()).build()?;
+                    let octocrab = OctocrabBuilder::new()
+                        .personal_token(token.expose_secret().to_string())
+                        .build()?;
                     selector.get_prs(&octocrab).await
                 }
                 .instrument(tracing::info_span!("getting prs")),
