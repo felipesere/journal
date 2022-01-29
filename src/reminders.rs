@@ -383,13 +383,13 @@ impl FromStr for SpecificDate {
 #[rustfmt::skip]
 fn parse_weekday(s: &str) -> Result<Weekday, String> {
     match s {
-        "Monday"    | "monday"   => Ok(Weekday::Monday),
-        "Tuesday"   | "tuesday"  => Ok(Weekday::Tuesday),
-        "Wednesday" | "wedneday" => Ok(Weekday::Wednesday),
-        "Thursday"  | "thursday" => Ok(Weekday::Thursday),
-        "Friday"    | "friday"   => Ok(Weekday::Friday),
-        "Saturday"  | "saturday" => Ok(Weekday::Saturday),
-        "Sunday"    | "sunday"   => Ok(Weekday::Sunday),
+        "Monday"    | "Mon" | "monday"   | "mon" => Ok(Weekday::Monday),
+        "Tuesday"   | "Tue" | "tuesday"  | "tue" => Ok(Weekday::Tuesday),
+        "Wednesday" | "Wed" | "wedneday" | "wed" => Ok(Weekday::Wednesday),
+        "Thursday"  | "Thu" | "thursday" | "thu" => Ok(Weekday::Thursday),
+        "Friday"    | "Fri" | "friday"   | "fri" => Ok(Weekday::Friday),
+        "Saturday"  | "Sat" | "saturday" | "sat" => Ok(Weekday::Saturday),
+        "Sunday"    | "Sun" | "sunday"   | "sun" => Ok(Weekday::Sunday),
         _ => Err(format!("No matching day of the week: {}", s)),
     }
 }
