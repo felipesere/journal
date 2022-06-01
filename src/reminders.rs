@@ -7,11 +7,12 @@ use std::str::FromStr;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::StructOpt;
 use serde::{Deserialize, Serialize};
+use tabled::object::Segment;
 use time::format_description::FormatItem;
 use time::{format_description, Date, Month, OffsetDateTime, Weekday};
 
 use handlebars::Handlebars;
-use tabled::{Alignment, Column, Modify, Style, Table, Tabled};
+use tabled::{Alignment, Modify, Style, Table, Tabled};
 
 use crate::config::Section;
 use crate::{storage::Journal, Config};
@@ -141,8 +142,8 @@ impl ReminderCmd {
 
                 let data = reminders_storage.all();
                 let table = Table::new(&data)
-                    .with(Style::PSEUDO)
-                    .with(Modify::new(Column(..)).with(Alignment::left()));
+                    .with(Style::modern())
+                    .with(Modify::new(Segment::all()).with(Alignment::left()));
 
                 println!("{}", table);
             }
